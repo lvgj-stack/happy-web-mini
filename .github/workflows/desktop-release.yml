@@ -52,10 +52,13 @@ jobs:
   build:
     name: 打包并发布
     if: github.event_name == 'push' || github.event.action != 'closed'
-    runs-on: macos-latest
+    # Linux 上打包（macOS 机器经常排队排不到），用 rcodesign 做 ad-hoc 签名
+    runs-on: ubuntu-latest
     env:
       # PR 上用 PR 自己的提交，不用 GitHub 生成的合并提交
       SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RCODESIGN: apple-codesign-0.29.0-x86_64-unknown-linux-musl
+      RCODESIGN_SHA256: dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,15 +92,35 @@ jobs:
           npm ci
           npm test
 
+      - name: 安装 rcodesign
+        if: steps.meta.outputs.skip != 'true'
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/rcodesign.tar.gz" \
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/$RCODESIGN.tar.gz"
+          echo "$RCODESIGN_SHA256  $RUNNER_TEMP/rcodesign.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/rcodesign.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$RCODESIGN" >> "$GITHUB_PATH"
+
       - name: 打包 arm64 和 x64
         if: steps.meta.outputs.skip != 'true'
         working-directory: desktop
+        env:
+          # 打包只用 electron 的版本号，Mac 版的 Electron 由 packager 另外下载
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: |
           npm ci
-          node node_modules/electron/install.js
-          npm run build
+          npm run build 2>&1 | tee "$RUNNER_TEMP/build.log"
+          # rcodesign verify 不支持整个 bundle、对 ad-hoc 签名会误报，这里只确认每个 bundle 都签上了
+          [ "$(grep -c 'ad-hoc signed with rcodesign' "$RUNNER_TEMP/build.log")" = 2 ]
           for arch in arm64 x64; do
-            codesign --verify --deep --strict "build/out/Happy-darwin-$arch/Happy.app"
+            app="build/out/Happy-darwin-$arch/Happy.app"
+            test -f "$app/Contents/_CodeSignature/CodeResources"
+            for helper in "$app"/Contents/Frameworks/*.app; do
+              test -f "$helper/Contents/_CodeSignature/CodeResources"
+            done
+            for fw in "$app"/Contents/Frameworks/*.framework; do
+              test -f "$fw/Versions/A/_CodeSignature/CodeResources"
+            done
           done
 
       - name: 发布预发版
