@@ -1,0 +1,137 @@
+# Mac 应用的预发版和正式版。版本号只看 desktop/package.json 的 version。
+#
+# - PR 打开/推送：打包，发预发版 v<version>-pr.<N>（每次推送替换），在 PR 里贴链接
+# - PR 关闭：删掉这个 PR 的预发版和 tag
+# - 推到 main：v<version> 还没有就打包发正式版；已经有了就跳过（没改版本号的合并不发版）
+name: desktop-release
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'web/**'
+      - 'desktop/**'
+      - '.github/workflows/desktop-release.yml'
+      - '.github/release-notes.md'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'desktop/**'
+      - '.github/workflows/desktop-release.yml'
+      - '.github/release-notes.md'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: desktop-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  PR: ${{ github.event.pull_request.number }}
+
+jobs:
+  cleanup:
+    name: 删除 PR 预发版
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 删除 v*-pr.<N>
+        run: |
+          gh release list --limit 200 --json tagName --jq '.[].tagName' \
+            | { grep -E -- "-pr\.${PR}\$" || true; } \
+            | while read -r tag; do
+                echo "deleting $tag"
+                gh release delete "$tag" --cleanup-tag --yes
+              done
+
+  build:
+    name: 打包并发布
+    if: github.event_name == 'push' || github.event.action != 'closed'
+    runs-on: macos-latest
+    env:
+      # PR 上用 PR 自己的提交，不用 GitHub 生成的合并提交
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: 读版本号
+        id: meta
+        run: |
+          version=$(node -p "require('./desktop/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            if gh release view "v$version" >/dev/null 2>&1; then
+              echo "v$version 已经发布过，跳过（要发新版就改 desktop/package.json 的 version）"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.meta.outputs.skip != 'true'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            desktop/package-lock.json
+
+      - name: 网页依赖和测试
+        if: steps.meta.outputs.skip != 'true'
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+
+      - name: 打包 arm64 和 x64
+        if: steps.meta.outputs.skip != 'true'
+        working-directory: desktop
+        run: |
+          npm ci
+          node node_modules/electron/install.js
+          npm run build
+          for arch in arm64 x64; do
+            codesign --verify --deep --strict "build/out/Happy-darwin-$arch/Happy.app"
+          done
+
+      - name: 发布预发版
+        if: github.event_name == 'pull_request'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          tag="v$VERSION-pr.$PR"
+          # 换掉这个 PR 之前的预发版（版本号中途改过的也一起删）
+          gh release list --limit 200 --json tagName --jq '.[].tagName' \
+            | { grep -E -- "-pr\.${PR}\$" || true; } \
+            | while read -r old; do gh release delete "$old" --cleanup-tag --yes; done
+          {
+            echo "> PR #$PR 的预发构建（提交 ${SHA:0:7}），PR 关闭后自动删除。"
+            echo
+            sed "s/{{VERSION}}/$VERSION/g" .github/release-notes.md
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$tag" desktop/dist/*.zip \
+            --target "$SHA" --prerelease --latest=false \
+            --title "Happy for macOS $VERSION（PR #$PR 预发）" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+          url=$(gh release view "$tag" --json url --jq .url)
+          gh pr comment "$PR" --edit-last --create-if-none --body "$(printf '%s\n\n%s\n%s' \
+            "Mac 预发版 [\`$tag\`]($url) 已更新（提交 ${SHA:0:7}）。" \
+            "- Apple 芯片：Happy-$VERSION-mac-arm64.zip" \
+            "- Intel：Happy-$VERSION-mac-x64.zip")"
+
+      - name: 发布正式版
+        if: github.event_name == 'push' && steps.meta.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          sed "s/{{VERSION}}/$VERSION/g" .github/release-notes.md > "$RUNNER_TEMP/notes.md"
+          gh release create "v$VERSION" desktop/dist/*.zip \
+            --target "$SHA" --latest \
+            --title "Happy for macOS $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes
