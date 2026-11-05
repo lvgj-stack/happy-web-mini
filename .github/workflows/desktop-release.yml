@@ -57,8 +57,9 @@ jobs:
     env:
       # PR 上用 PR 自己的提交，不用 GitHub 生成的合并提交
       SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      RCODESIGN: apple-codesign-0.29.0-x86_64-unknown-linux-musl
-      RCODESIGN_SHA256: dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002
+      # 别用 RCODESIGN_ 开头的变量名：rcodesign 会把它们当成自己的配置读
+      RCS_PKG: apple-codesign-0.29.0-x86_64-unknown-linux-musl
+      RCS_SHA256: dbe85cedd8ee4217b64e9a0e4c2aef92ab8bcaaa41f20bde99781ff02e600002
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,10 +97,10 @@ jobs:
         if: steps.meta.outputs.skip != 'true'
         run: |
           curl -sSfL -o "$RUNNER_TEMP/rcodesign.tar.gz" \
-            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/$RCODESIGN.tar.gz"
-          echo "$RCODESIGN_SHA256  $RUNNER_TEMP/rcodesign.tar.gz" | sha256sum -c -
+            "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/$RCS_PKG.tar.gz"
+          echo "$RCS_SHA256  $RUNNER_TEMP/rcodesign.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/rcodesign.tar.gz" -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/$RCODESIGN" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/$RCS_PKG" >> "$GITHUB_PATH"
 
       - name: 打包 arm64 和 x64
         if: steps.meta.outputs.skip != 'true'
