@@ -13,7 +13,15 @@
 
 ## 安装
 
-拿 `dist/Happy-<版本>-mac-arm64.zip`（Apple 芯片）或 `-x64.zip`（Intel），解压后把 Happy.app 拖进「应用程序」。
+从 [GitHub Releases](https://github.com/lvgj-stack/happy-web-mini/releases) 下载 `Happy-<版本>-mac-arm64.zip`（Apple 芯片）或
+`-x64.zip`（Intel），本地打包的在 `dist/` 里。解压后把 Happy.app 拖进「应用程序」。
+
+## 发版
+
+由 CI（`.github/workflows/desktop-release.yml`）发，版本号只看 `package.json` 的 `version`：
+
+- PR 每次推送都会打包，发预发版 `v<版本>-pr.<PR 号>`，并在 PR 里贴下载链接；PR 关闭后自动删除
+- 合进 `main` 时，如果 `v<版本>` 还没发过就发正式版。要发新版就在 PR 里把版本号改大
 
 应用是 ad-hoc 签名，没有经过 Apple 公证。如果是浏览器下载的，第一次打开会被拦下：右键 › 打开，
 或者在「系统设置 › 隐私与安全性」里点「仍要打开」。也可以直接去掉隔离标记：
