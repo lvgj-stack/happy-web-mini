@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { packager } from '@electron/packager';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const webRoot = path.resolve(here, '..');
+const webRoot = path.resolve(here, '..', 'web');
 const build = path.join(here, 'build');
 const stage = path.join(build, 'stage');
 const dist = path.join(here, 'dist');

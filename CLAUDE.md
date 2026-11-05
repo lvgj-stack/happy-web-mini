@@ -5,7 +5,7 @@
 - Commit every change on `main` once it is done and verified. Don't leave work uncommitted.
 - Every commit subject must have a scope: `<type>(<scope>): <summary>`
   - Scopes:
-    - `web`: the web client (files in the repo root: `app.js`, `index.html`, …)
+    - `web`: the web client (`web/`)
     - `desktop`: the macOS app (`desktop/`)
     - `all`: changes to both, or to the repo as a whole (`.gitignore`, `CLAUDE.md`, …)
   - Types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`

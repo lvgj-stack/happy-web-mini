@@ -12,10 +12,10 @@ const path = require('node:path');
 const ORIGIN = 'app://happy';
 const isMac = process.platform === 'darwin';
 
-// Packaged builds carry the page in ./web; in development it is the folder above.
+// Packaged builds carry the page in ./web; in development it is ../web.
 const WEB_ROOT = fs.existsSync(path.join(__dirname, 'web', 'index.html'))
     ? path.join(__dirname, 'web')
-    : path.resolve(__dirname, '..');
+    : path.resolve(__dirname, '..', 'web');
 
 const MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -41,8 +41,6 @@ function resolveAsset(url) {
     if (rel === '/' || rel === '') rel = '/index.html';
     const file = path.resolve(WEB_ROOT, '.' + rel);
     if (file !== WEB_ROOT && !file.startsWith(WEB_ROOT + path.sep)) return null;
-    // The dev tree also holds the desktop shell itself; the page never needs it.
-    if (file.startsWith(path.join(WEB_ROOT, 'desktop') + path.sep)) return null;
     return file;
 }
 

@@ -1,6 +1,6 @@
 # Happy for macOS
 
-把上级目录的 happy-web-mini 做成一个 Mac 应用（Electron）。功能和网页版一样，另外加上 Mac 应用该有的这些：
+把 `../web` 里的 happy-web-mini 做成一个 Mac 应用（Electron）。功能和网页版一样，另外加上 Mac 应用该有的这些：
 
 - 原生菜单：Happy › 设置…（⌘,）、文件 › 新建会话…（⌘N）、显示 › 切换侧栏（⌘B），编辑菜单里的复制粘贴、撤销都能用
 - Dock 角标：完成未读的会话数加上等你回答的会话数
@@ -28,7 +28,7 @@ xattr -dr com.apple.quarantine /Applications/Happy.app
 
 ```sh
 npm install
-npm start            # 直接用上级目录的网页文件运行
+npm start            # 直接用 ../web 里的网页文件运行
 npm run smoke        # 冒烟测试；Linux 上：xvfb-run -a npx electron --no-sandbox smoke.js
 npm run build        # 打 arm64 和 x64；只打一个：npm run build -- --arch=arm64
 npm run check        # dist/ 里的包是否就是当前网页的构建（落后时退出码 1）
@@ -44,6 +44,6 @@ ES import 找），用 `assets/` 里的 Happy 图标生成 .icns，用 @electron
 
 - `main.js` — 主进程：`app://happy/` 协议（只提供网页根目录里的文件）、窗口、菜单、Dock 角标和通知
 - `preload.js` — 页面能调用的全部接口（`window.happyDesktop`）
-- `../desktop.js` — 页面这一侧：算角标、决定什么时候发通知（测试在 `../test/`）
+- `../web/desktop.js` — 页面这一侧：算角标、决定什么时候发通知（测试在 `../web/test/`）
 - `smoke.js` — 冒烟测试：页面加载无报错、扫码登录能连到服务器、协议不越界、角标/通知/菜单都通
 - `build.mjs` — 打包
