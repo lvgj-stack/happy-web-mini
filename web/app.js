@@ -13,6 +13,7 @@ import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from '.
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
+import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
@@ -44,6 +45,7 @@ const state = {
     askSent: new Set(),      // question sets answered here, hidden until agentState catches up
     askSignature: null,
     thinkingNode: null,
+    browse: null,            // ↑ history in the composer: { sessionId, index, draft, text } while walking it
 };
 
 // ---------- HTTP ----------
@@ -913,6 +915,7 @@ function placeView(thread, view, seq) {
         }
     }
     if (!renderable(view)) return null;
+    if (view.kind === 'user') (thread.prompts ??= new Map()).set(seq, view.text); // for ↑ in the composer
     const node = messageNode(view, thread.session);
     node.dataset.seq = String(seq);
     return node;
@@ -1366,6 +1369,32 @@ function pickSlash(i) {
 }
 
 /** Arrow keys, Tab/Enter and Escape while the list is open. True when handled. */
+/**
+ * ↑ in an empty composer brings back the last message sent in this chat, ↑
+ * again the one before; ↓ goes forward and past the newest empties the box.
+ * Only on the first / last line, and stops once the recalled text is edited.
+ */
+function historyKey(e) {
+    if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return false;
+    const s = state.current;
+    const input = $('input');
+    if (!s || input.selectionStart !== input.selectionEnd) return false;
+    // Still walking only while the box holds what the last step put there (not edited, sent or switched).
+    const browse = state.browse?.sessionId === s.id && state.browse.text === input.value ? state.browse : null;
+    const up = e.key === 'ArrowUp';
+    if (up ? (input.value !== '' && !browse) || !onFirstLine(input.value, input.selectionStart)
+        : !browse || !onLastLine(input.value, input.selectionEnd)) return false;
+    const step = stepHistory(promptHistory(state.threads.get(s.id)?.prompts), browse, up ? 'up' : 'down', input.value);
+    if (!step) return false;
+    state.browse = step.browse && { ...step.browse, sessionId: s.id };
+    input.value = step.text;
+    input.setSelectionRange(step.text.length, step.text.length);
+    autosize();
+    hideSlash();
+    renderActions();
+    return true;
+}
+
 function slashKey(e) {
     if ($('slash').hidden || !slash.items.length) return false;
     const n = slash.items.length;
@@ -2371,6 +2400,7 @@ $('input').addEventListener('keydown', (e) => {
     // Keys that confirm an IME candidate (pinyin etc.) must not send or pick.
     if (e.isComposing || e.keyCode === 229) return;
     if (slashKey(e)) { e.preventDefault(); return; }
+    if (historyKey(e)) { e.preventDefault(); return; }
     if (e.key !== 'Enter' || e.shiftKey) return; // Shift+Enter: newline
     e.preventDefault();
     send();
