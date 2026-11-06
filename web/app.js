@@ -13,6 +13,7 @@ import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from '.
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
+import { createWorktree, listWorktrees, repoOf } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 
@@ -1904,7 +1905,8 @@ $('list').addEventListener('contextmenu', (e) => {
 // ---------- New session ----------
 
 const AGENTS = [['claude', 'Claude Code'], ['codex', 'Codex'], ['gemini', 'Gemini']];
-const newSession = { machines: [], busy: false };
+const newSession = { machines: [], busy: false, worktrees: null, worktreesFor: null, worktreeTimer: null };
+const WT_NEW = '\u0000new'; // the Worktree select's 「新建 worktree」; '' is none, anything else an existing checkout's path
 
 /** The account's machines whose key we can open, online ones first. */
 async function loadMachines() {
@@ -1945,7 +1947,7 @@ function renderNewForm(clearError = true) {
         const b = el('button', null, shortHome(path, home));
         b.type = 'button';
         b.title = path;
-        b.onclick = () => { $('new-dir').value = shortHome(path, home); $('new-dir').focus(); };
+        b.onclick = () => { $('new-dir').value = shortHome(path, home); $('new-dir').focus(); onNewDirChanged(); };
         return b;
     }));
     const agent = $('new-agent');
@@ -1958,6 +1960,71 @@ function renderNewForm(clearError = true) {
     $('new-submit').disabled = !m || !m.online || newSession.busy;
     if (m && !m.online) $('new-error').textContent = '这台电脑不在线（daemon 没有运行）。';
     else if (clearError) $('new-error').textContent = '';
+    renderWorktreeSelect();
+    scheduleWorktreeList();
+}
+
+/** The 目录 field as an absolute path on the picked machine, or null. */
+function typedDirectory(m) {
+    const typed = $('new-dir').value.trim();
+    if (!m || !typed) return null;
+    const directory = expandHome(typed, m.meta.homeDir).replace(/(.)\/+$/, '$1');
+    return directory.startsWith('/') || /^[A-Za-z]:[\\/]/.test(directory) ? directory : null;
+}
+
+/** A shell command on the machine through its daemon (`bash` RPC); never throws. */
+async function machineBash(m, command, cwd) {
+    try {
+        const r = await machineRpc(m, 'bash', { command, cwd });
+        return { success: !!r?.success, stdout: r?.stdout ?? '', stderr: r?.stderr || r?.error || '', exitCode: r?.exitCode ?? -1 };
+    } catch (e) {
+        return { success: false, stdout: '', stderr: e.message, exitCode: -1 };
+    }
+}
+
+/**
+ * The Worktree select: none, a new one, then the repository's other checkouts
+ * once listed. A directory that is itself one of them starts selected on it.
+ */
+function renderWorktreeSelect() {
+    const select = $('new-worktree');
+    const keep = select.value;
+    const m = newSession.machines.find((x) => x.id === $('new-machine').value);
+    const directory = typedDirectory(m);
+    const listed = newSession.worktreesFor === (m && directory && `${m.id}\u0000${repoOf(directory)}`);
+    const worktrees = listed ? newSession.worktrees : undefined; // undefined: not listed yet; null: not a git repository
+    const option = (value, text, title) => { const o = el('option', null, text); o.value = value; if (title) o.title = title; return o; };
+    const fresh = option(WT_NEW, worktrees === null ? '新建 worktree（这个目录不是 git 仓库）' : '新建 worktree');
+    fresh.disabled = worktrees === null;
+    select.replaceChildren(option('', '不用，直接在这个目录里'), fresh,
+        ...(worktrees ?? []).map((w) => option(w.path, `${w.branch}（已有）`, w.path)));
+    const values = [...select.options].filter((o) => !o.disabled).map((o) => o.value);
+    select.value = values.includes(keep) && keep !== '' ? keep
+        : directory && values.includes(directory) ? directory : '';
+}
+
+function onNewDirChanged() {
+    renderWorktreeSelect();
+    scheduleWorktreeList();
+}
+
+/** List the typed directory's worktrees once typing settles. */
+function scheduleWorktreeList() {
+    clearTimeout(newSession.worktreeTimer);
+    const m = newSession.machines.find((x) => x.id === $('new-machine').value);
+    const directory = typedDirectory(m);
+    const key = m && directory && `${m.id}\u0000${repoOf(directory)}`;
+    if (!m?.online || !key || key === newSession.worktreesFor) return;
+    newSession.worktreeTimer = setTimeout(async () => {
+        const worktrees = await listWorktrees(directory, (command, cwd) => machineBash(m, command, cwd));
+        // Still the same machine and directory?
+        const now = newSession.machines.find((x) => x.id === $('new-machine').value);
+        const nowDir = typedDirectory(now);
+        if (!now || !nowDir || `${now.id}\u0000${repoOf(nowDir)}` !== key) return;
+        newSession.worktrees = worktrees;
+        newSession.worktreesFor = key;
+        renderWorktreeSelect();
+    }, 400);
 }
 
 /** `dir`, when given, fills the 目录 field (for 「在这里新建会话」 in the list's menu). */
@@ -2024,17 +2091,28 @@ async function submitNewSession(e) {
     const m = newSession.machines.find((x) => x.id === $('new-machine').value);
     const typed = $('new-dir').value.trim();
     if (!m || !typed || newSession.busy) return;
-    const directory = expandHome(typed, m.meta.homeDir).replace(/(.)\/+$/, '$1');
-    if (!directory.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(directory)) {
+    let directory = typedDirectory(m);
+    if (!directory) {
         $('new-error').textContent = '请填绝对路径，或以 ~ 开头的路径。';
         return;
     }
+    const worktree = $('new-worktree').value;
     newSession.busy = true;
     const button = $('new-submit');
     button.disabled = true;
     button.textContent = '正在启动';
     $('new-error').textContent = '';
+    let made = null;
     try {
+        if (worktree === WT_NEW) {
+            button.textContent = '正在建 worktree';
+            made = await createWorktree(directory, (command, cwd) => machineBash(m, command, cwd));
+            directory = made.path;
+            newSession.worktreesFor = null; // the list has one more now
+            button.textContent = '正在启动';
+        } else if (worktree) {
+            directory = worktree;
+        }
         const params = { type: 'spawn-in-directory', directory, approvedNewDirectoryCreation: false, agent: $('new-agent').value };
         let r = await machineRpc(m, 'spawn-happy-session', params);
         if (r?.type === 'requestToApproveDirectoryCreation') {
@@ -2047,9 +2125,12 @@ async function submitNewSession(e) {
         const s = await waitForSession(r.sessionId);
         $('new-session').close();
         $('new-dir').value = '';
+        $('new-worktree').value = '';
         if (s) openSession(s); else notice('会话已启动，稍后会出现在列表里。');
     } catch (err) {
-        $('new-error').textContent = `没有启动成功：${err.message}`;
+        $('new-error').textContent = made
+            ? `worktree ${made.branch} 已经建好（${shortHome(made.path, m.meta.homeDir)}），但会话没有启动成功：${err.message}`
+            : `没有启动成功：${err.message}`;
     } finally {
         newSession.busy = false;
         button.textContent = '开始';
@@ -2233,6 +2314,7 @@ $('new-open').onclick = () => openNewSession();
 $('new-form').addEventListener('submit', submitNewSession);
 $('new-cancel').onclick = () => $('new-session').close();
 $('new-machine').onchange = () => { $('new-dir').value = ''; renderNewForm(); };
+$('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
 $('send').onclick = send;
 $('attach').onclick = () => $('file').click();

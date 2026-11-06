@@ -50,6 +50,9 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 - 新建会话：左下角「新建会话」，选电脑（`GET /v1/machines`，用机器密钥解 metadata）、填目录（`~` 按那台电脑的 homeDir 展开，
   下面列出这台电脑上用过的项目目录）、选 agent（按 `cliAvailability`）。经机器 RPC `spawn-happy-session` 让 daemon 启动；
   目录不存在时先确认再创建。启动后自动打开新会话
+- 新建会话时可以顺手建 worktree：目录下面的「Worktree」选「新建 worktree」，会经机器 RPC `bash` 在仓库根目录执行
+  `git worktree add -b <形容词-名词> .dev/worktree/<名字>`（和官方 App 一样，重名加 -2…-4），再在新 worktree 里启动会话；
+  也能直接选这个仓库已有的 worktree（`git worktree list`）。目录不是 git 仓库时「新建」不可选
 - 发送文本消息（AES-256-GCM 加密后 `POST /v3/sessions/:id/messages`）
 - 归档：通过 Socket.IO 让 CLI `killSession`（CLI 结束进程并写上 archived）；CLI 不在线时
   web 自己用 `update-metadata` 写 `lifecycleState: "archived"`
@@ -90,6 +93,7 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 - `defaults.js` — 默认模型/强度的存取和对某个会话是否适用
 - `tools.js` — 每种工具的图标、一行摘要和详情，时长格式；图标用 Lucide（`lucide-static`，按需引入单个图标）
 - `attachments.js` — 图片压缩、加密上传、file 事件、下载解密，对照 iOS 的 HappyAPI+Attachments / BlobCipher
+- `worktree.js` — 新建会话里的 worktree：列出、新建（经 daemon 的 `bash` RPC）
 - `desktop.js` — 需要你的会话数（Mac 应用的 Dock 角标 / 浏览器的标签页标题）和系统通知，两边共用一个开关
 - `test/` — `npm test`
 - `index.html` — 页面和样式
