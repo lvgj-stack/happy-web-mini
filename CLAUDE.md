@@ -1,8 +1,17 @@
 # CLAUDE.md
 
+## Worktrees
+
+- Any development work (code, config, tests) happens in its own git worktree, never directly in the main checkout. Several sessions work in this repo at once; sharing one working tree and index lets one session's `git commit` sweep up another's staged changes.
+  - Create: `git worktree add .dev/worktree/<name> -b <name> main` (`.dev/` is gitignored)
+  - Dependencies are not shared: run `npm install` in the worktree's `web/` or `desktop/` (or symlink the main checkout's `node_modules`)
+  - Work, verify and commit on that branch inside the worktree
+  - Finish: rebase onto `main` in the worktree, then in the main checkout `git merge --ff-only <name>`; afterwards `git worktree remove .dev/worktree/<name>` and `git branch -d <name>`
+- Never stage or commit other sessions' changes in the main checkout. If you must commit there, commit by path (`git commit -- <files>`) so only your files go in.
+
 ## Commits
 
-- Commit every change on `main` once it is done and verified. Don't leave work uncommitted.
+- Commit every change once it is done and verified, and land it on `main` (via the worktree flow above). Don't leave work uncommitted.
 - Every commit subject must have a scope: `<type>(<scope>): <summary>`
   - Scopes:
     - `web`: the web client (`web/`)
