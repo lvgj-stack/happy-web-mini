@@ -15,7 +15,7 @@ import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from '.
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
-import { backgroundStart, backgroundStops, backgroundText } from './background.js';
+import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
@@ -844,11 +844,9 @@ function parseUserText(text) {
     }
 }
 
-/** Keeps `thread.background` (call -> label) in step with what the agent left running. */
+/** Keeps `thread.background` in step with what the agent left running (see background.js). */
 function trackBackground(thread, view) {
-    const started = backgroundStart(view);
-    if (started) (thread.background ??= new Map()).set(started.call, started.label);
-    for (const call of view?.stops ?? []) thread.background?.delete(call);
+    (thread.background ??= backgroundTracker()).see(view);
 }
 
 function messageNode(view, s) {
@@ -1114,7 +1112,7 @@ function renderThinking() {
     renderStop(s, thread, turnShowsIt || on);
     // Idle, but a subagent or command it started in the background still runs.
     const background = thread && !on && !turnShowsIt && s.active && !isArchived(s)
-        ? backgroundText([...(thread.background?.values() ?? [])]) : '';
+        ? backgroundText(thread.background?.labels() ?? []) : '';
     const node = state.thinkingNode;
     if (!on && !background) { node?.remove(); return; }
     const text = background || (s.thinking ? '正在思考' : '等待回复');
