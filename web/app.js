@@ -18,6 +18,9 @@ import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.j
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
+import { fitToViewport } from './viewport.js';
+
+fitToViewport();
 
 const nacl = window.nacl;
 const $ = (id) => document.getElementById(id);

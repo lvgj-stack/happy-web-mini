@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Happy</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <meta name="theme-color" content="#F2F3EF">
@@ -75,7 +75,8 @@
   #insecure { color: var(--muted); font-size: 12px; margin-top: 40px; }
 
   /* ---------- App ---------- */
-  #app { display: flex; height: 100vh; }
+  /* --app-height: the visual viewport, set by viewport.js so the on-screen keyboard can't push the header off */
+  #app { display: flex; height: 100vh; height: var(--app-height, 100dvh); }
   aside { width: var(--side-width, 300px); flex: none; background: var(--paper); display: flex; flex-direction: column; }
   .side-head { display: flex; align-items: center; gap: 2px; padding: 18px 14px 10px 24px; }
   .side-head .brand { margin-right: auto; font: 400 21px/1 var(--serif); color: var(--ink); }
