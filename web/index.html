@@ -171,6 +171,21 @@
   .machine.archived .more { display: block; width: 100%; text-align: left; padding: 6px 12px 6px 33px; color: var(--moss); font-size: 13px; border-radius: 6px; }
   .machine.archived .more:hover { background: rgba(38, 42, 39, .04); }
 
+  /* Right-click menu on the list (contextmenu.js); the row it is for stays lit */
+  .row.menu-open, .tree-head.menu-open, .machine.archived .group-head.menu-open { background: rgba(38, 42, 39, .06); }
+  .group-head.menu-open { background: #E3E6DF; }
+  .row.selected.menu-open { background: var(--moss-tint); }
+  .ctx-menu { position: fixed; z-index: 50; min-width: 180px; max-width: 280px; padding: 4px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(38, 42, 39, .12); font-size: 13px; line-height: 1.5; }
+  .ctx-menu:focus { outline: none; }
+  .ctx-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 5px 10px; border-radius: 5px; white-space: nowrap; }
+  .ctx-item svg, .ctx-item .ctx-pad { flex: none; width: 15px; height: 15px; color: var(--muted); }
+  .ctx-item .label { overflow: hidden; text-overflow: ellipsis; }
+  .ctx-item:focus, .ctx-item:focus-visible { outline: none; background: var(--moss-tint); }
+  .ctx-item[data-icon="unread"] svg { color: var(--moss); transform: scale(.6); }
+  .ctx-item.danger { color: var(--error); }
+  .ctx-item.danger svg { color: currentColor; }
+  .ctx-item.danger:focus { background: #F6E9E6; }
+  .ctx-sep { height: 1px; margin: 4px 6px; background: var(--rule); }
 
   /* Drag handle between the sidebar and the chat */
   #resizer { flex: none; width: 8px; margin: 0 -4px; position: relative; z-index: 2; cursor: col-resize; touch-action: none; }

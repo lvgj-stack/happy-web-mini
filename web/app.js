@@ -6,7 +6,8 @@ import { io } from './node_modules/socket.io-client/dist/socket.io.esm.min.js';
 import { DEFAULT_AGENTS, agentModelOptions, currentEffort, currentModelKey, effortName, effortOptions, isRig, modelMeta, modelOptions } from './models.js';
 import { defaultsFor, loadDefaults, saveDefault } from './defaults.js';
 import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
-import { addCopyButtons, handleCopyClicks } from './clipboard.js';
+import { addCopyButtons, copyText, handleCopyClicks } from './clipboard.js';
+import { openMenu } from './contextmenu.js';
 import { answerCall, canSubmit, declineCall, pendingQuestions, toggle } from './questions.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
@@ -576,6 +577,7 @@ function markSelected() {
 function renderHead() {
     const s = state.current;
     $('archive').hidden = !s || isArchived(s);
+    renderArchiveButton();
     $('composer').hidden = !s || isArchived(s);
     $('readonly').hidden = !s || !isArchived(s);
     if (!s) {
@@ -1772,13 +1774,22 @@ async function writeArchived(s, sock) {
     if (!isArchived(s)) throw new Error('会话正在被修改，稍后再试');
 }
 
-async function archiveCurrent() {
-    const s = state.current;
-    if (!s || isArchived(s)) return;
-    if (s.active && !confirm('归档后，这台电脑上的会话进程会结束，正在进行的任务会中断。确定归档？')) return;
-    const button = $('archive');
-    button.disabled = true;
-    setButton(button, 'archive', '正在归档', true);
+/** The header's 归档 button, busy while the open session is being archived. */
+function renderArchiveButton() {
+    const busy = !!state.current?.archiving;
+    $('archive').disabled = busy;
+    setButton($('archive'), 'archive', busy ? '正在归档' : '归档', busy);
+}
+
+const archiveCurrent = () => archiveSession(state.current);
+
+/** Archive a session (the open one, or one picked from the list's menu). */
+async function archiveSession(s) {
+    if (!s || isArchived(s) || s.archiving) return;
+    const what = s === state.current ? '' : `「${sessionTitle(s)}」`;
+    if (s.active && !confirm(`归档${what}后，这台电脑上的会话进程会结束，正在进行的任务会中断。确定归档？`)) return;
+    s.archiving = true;
+    renderArchiveButton();
     // Where to go afterwards: the next session in the list, else the one before it.
     const live = liveSessions();
     const at = live.indexOf(s);
@@ -1798,10 +1809,10 @@ async function archiveCurrent() {
         archived = true;
         notice('');
     } catch (e) {
-        notice(`归档失败：${e.message}`);
+        notice(`${what}归档失败：${e.message}`);
     } finally {
-        button.disabled = false;
-        setButton(button, 'archive', '归档');
+        s.archiving = false;
+        renderArchiveButton();
         renderList();
         renderHead();
         renderAsk();
@@ -1810,6 +1821,85 @@ async function archiveCurrent() {
     const next = neighbours.find((n) => n !== s && isOnline(n) && n.meta.isSideChat !== true);
     if (archived && state.current === s && next && !document.body.classList.contains('in-settings')) openSession(next);
 }
+
+// ---------- List menu ----------
+// Right-click on a session, a computer, a project/worktree or 已归档. Found
+// through the DOM (rows carry data-id), so the list's rendering stays as is.
+
+function markSeen(sessions) {
+    let changed = false;
+    for (const s of sessions) {
+        if (!hasUnseen(s)) continue;
+        state.seen[s.id] = s.seq ?? 0;
+        changed = true;
+    }
+    if (changed) { saveSeen(); renderList(); }
+}
+
+/** Flag a read session as 完成未读 again, as if its last message were new. */
+function markUnread(s) {
+    if (!(s.seq > 0)) return;
+    state.seen[s.id] = s.seq - 1;
+    s.changedAt = 0; // already settled
+    saveSeen();
+    renderList();
+}
+
+async function copyFromMenu(text) {
+    if (!(await copyText(text))) notice('复制失败');
+}
+
+const sessionsIn = (node) => [...node.querySelectorAll('.row')].map((r) => state.sessions.get(r.dataset.id)).filter(Boolean);
+const foldItem = (head) => ({ label: head.getAttribute('aria-expanded') === 'true' ? '收起' : '展开', action: () => head.click() });
+
+function sessionMenu(s) {
+    const archived = isArchived(s);
+    const special = !!(s.meta.bot || s.meta.task); // bots and tasks have no project to start in
+    const projectPath = place(s).projectPath || s.meta.path;
+    return [
+        { label: '打开', action: () => openSession(s), hidden: s === state.current && !document.body.classList.contains('in-settings') },
+        { label: '标为已读', icon: 'copied', hidden: !hasUnseen(s), action: () => markSeen([s]) },
+        { label: '标为未读', icon: 'unread', hidden: archived || hasUnseen(s) || s === state.current || !(s.seq > 0), action: () => markUnread(s) },
+        '-',
+        { label: '在这个项目新建会话', icon: 'newChat', hidden: special || !projectPath || !s.meta.machineId, action: () => openNewSession(s.meta.machineId, projectPath) },
+        { label: '复制目录路径', icon: 'copy', hidden: !s.meta.path, action: () => copyFromMenu(s.meta.path) },
+        { label: '复制会话 ID', icon: 'copy', action: () => copyFromMenu(s.id) },
+        '-',
+        { label: s.archiving ? '正在归档…' : '归档', icon: 'archive', danger: true, hidden: archived, disabled: s.archiving, action: () => archiveSession(s) },
+    ];
+}
+
+function groupMenu(head) {
+    const box = head.parentElement;
+    const sessions = sessionsIn(box);
+    const fold = foldItem(head);
+    if (box.classList.contains('archived')) return [fold];
+    const read = { label: '全部标为已读', icon: 'copied', hidden: !sessions.some(hasUnseen), action: () => markSeen(sessions) };
+    const first = sessions[0];
+    if (head.classList.contains('group-head')) {
+        // A computer.
+        return [
+            { label: '在这台电脑上新建会话', icon: 'newChat', hidden: !first?.meta.machineId, action: () => openNewSession(first.meta.machineId) },
+            read, '-', fold,
+        ];
+    }
+    // A project or one of its worktrees.
+    const p = first && place(first);
+    const dir = !p ? '' : box.classList.contains('worktree') && p.worktree ? p.projectPath + WORKTREE_MARKER + p.worktree : p.projectPath;
+    return [
+        { label: '在这里新建会话', icon: 'newChat', hidden: !dir || !first.meta.machineId, action: () => openNewSession(first.meta.machineId, dir) },
+        { label: '复制路径', icon: 'copy', hidden: !dir, action: () => copyFromMenu(dir) },
+        read, '-', fold,
+    ];
+}
+
+$('list').addEventListener('contextmenu', (e) => {
+    const r = e.target.closest('.row');
+    const s = r && state.sessions.get(r.dataset.id);
+    if (s) return openMenu(e, sessionMenu(s), r);
+    const head = e.target.closest('.group-head, .tree-head');
+    if (head) openMenu(e, groupMenu(head), head);
+});
 
 // ---------- New session ----------
 
@@ -1870,7 +1960,8 @@ function renderNewForm(clearError = true) {
     else if (clearError) $('new-error').textContent = '';
 }
 
-async function openNewSession(preferMachineId) {
+/** `dir`, when given, fills the 目录 field (for 「在这里新建会话」 in the list's menu). */
+async function openNewSession(preferMachineId, dir) {
     const dialog = $('new-session');
     $('new-error').textContent = '';
     $('new-machine').replaceChildren(el('option', null, '正在载入…'));
@@ -1897,8 +1988,9 @@ async function openNewSession(preferMachineId) {
     const prefer = preferMachineId ?? current?.meta.machineId;
     const preferred = newSession.machines.find((m) => m.id === prefer && m.online) ?? newSession.machines.find((m) => m.online) ?? newSession.machines[0];
     select.value = preferred.id;
+    if (dir != null && preferred.id === preferMachineId) $('new-dir').value = shortHome(dir, preferred.meta.homeDir);
     // Start from the open chat's project when it is on that machine.
-    if (!$('new-dir').value && current && current.meta.machineId === preferred.id) {
+    else if (!$('new-dir').value && current && current.meta.machineId === preferred.id) {
         $('new-dir').value = shortHome(place(current).projectPath || current.meta.path || '', preferred.meta.homeDir);
     }
     renderNewForm();
