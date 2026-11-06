@@ -14,8 +14,15 @@ const agent = (call, args) => ({ kind: 'tool', call, name: 'Agent', title: 'Agen
 const send = (call, args) => ({ kind: 'tool', call, name: 'SendMessage', title: 'SendMessage', args });
 const stops = (text) => ({ kind: 'stops', stops: backgroundStops(text) });
 
-test('a tool call run in the background runs until its notification', () => {
+/** A tracker fed in order, numbering messages as they come. */
+function inOrder() {
     const t = backgroundTracker();
+    let seq = 0;
+    return { see: (view) => t.see(view, ++seq), labels: () => t.labels(), clear: () => t.clear() };
+}
+
+test('a tool call run in the background runs until its notification', () => {
+    const t = inOrder();
     t.see(agent('toolu_1', { description: 'Reviewer：集中审查' }));
     t.see({ kind: 'tool', call: 'toolu_2', name: 'Bash', args: { command: 'npm test', run_in_background: true } });
     assert.deepEqual(t.labels(), ['Reviewer：集中审查', 'npm test']);
@@ -26,7 +33,7 @@ test('a tool call run in the background runs until its notification', () => {
 });
 
 test('foreground calls and other messages start nothing', () => {
-    const t = backgroundTracker();
+    const t = inOrder();
     t.see({ kind: 'tool', call: 'x', name: 'Agent', args: { description: 'd' } });
     t.see({ kind: 'tool', call: 'y', name: 'Bash', args: { run_in_background: 'true' } });
     t.see({ kind: 'agent', text: 'hi' });
@@ -35,7 +42,7 @@ test('foreground calls and other messages start nothing', () => {
 });
 
 test('SendMessage to a stopped agent, by its agentId, runs it again', () => {
-    const t = backgroundTracker();
+    const t = inOrder();
     t.see(agent('toolu_dev', { description: 'Dev：实现字段' }));
     t.see(stops(note('toolu_dev', 'adev')));
     assert.deepEqual(t.labels(), []);
@@ -52,7 +59,7 @@ test('SendMessage to a stopped agent, by its agentId, runs it again', () => {
 });
 
 test('SendMessage by the name given at launch, before any notification', () => {
-    const t = backgroundTracker();
+    const t = inOrder();
     t.see(agent('toolu_dev', { name: 'Dev', description: '实现字段' }));
     t.see(send('toolu_s1', { to: 'Dev', summary: '再补一个', message: '…' }));
     assert.deepEqual(t.labels(), ['Dev · 再补一个'], 'one agent, shown once');
@@ -63,19 +70,43 @@ test('SendMessage by the name given at launch, before any notification', () => {
 });
 
 test('SendMessage to someone unknown ("main", a teammate) shows nothing', () => {
-    const t = backgroundTracker();
+    const t = inOrder();
     t.see(send('toolu_s', { to: 'main', message: 'hi' }));
     t.see(send('toolu_t', { to: 'researcher', message: 'hi' }));
     assert.deepEqual(t.labels(), []);
 });
 
 test('clear forgets what runs but still knows the agents', () => {
-    const t = backgroundTracker();
+    const t = inOrder();
     t.see(agent('toolu_dev', { name: 'Dev', description: 'd' }));
     t.clear();
     assert.deepEqual(t.labels(), []);
     t.see(send('toolu_s', { to: 'Dev', message: '…' }));
     assert.deepEqual(t.labels(), ['Dev']);
+});
+
+test('history fed newest first replays in seq order', () => {
+    const t = backgroundTracker();
+    // The newest page (a resume, its stop, another resume) comes before the page with the launch.
+    t.see(send('toolu_s2', { to: 'adev', summary: '第二轮' }), 40);
+    t.see(stops(note('toolu_s1', 'adev')), 30);
+    t.see(send('toolu_s1', { to: 'Dev' }), 20);
+    assert.deepEqual(t.labels(), [], 'the launch is not loaded yet: nothing known');
+    t.see(stops(note('toolu_dev', 'adev')), 11);
+    t.see(agent('toolu_dev', { name: 'Dev', description: 'd' }), 10);
+    assert.deepEqual(t.labels(), ['Dev · 第二轮']);
+});
+
+test('clear ends what ran before it, not what starts after', () => {
+    const t = backgroundTracker();
+    t.see(agent('toolu_a', { description: 'A' }), 1);
+    t.see({ kind: 'agent', text: 'x' }, 5);
+    t.clear();
+    assert.deepEqual(t.labels(), []);
+    t.see(agent('toolu_b', { description: 'B' }), 6);
+    assert.deepEqual(t.labels(), ['B']);
+    t.see(agent('toolu_old', { description: 'old' }), 2); // an older page loaded later
+    assert.deepEqual(t.labels(), ['B']);
 });
 
 test('a task notification names the calls and tasks it stops', () => {

@@ -721,6 +721,7 @@ async function loadOlder(s, thread) {
         const fragment = document.createDocumentFragment();
         for (const { m, view } of decoded) {
             thread.seen.add(m.id);
+            trackBackground(thread, view, m.seq);
             const node = placeView(thread, view, m.seq);
             thread.lastSeq = Math.max(thread.lastSeq, m.seq);
             if (node) fragment.append(node);
@@ -845,8 +846,8 @@ function parseUserText(text) {
 }
 
 /** Keeps `thread.background` in step with what the agent left running (see background.js). */
-function trackBackground(thread, view) {
-    (thread.background ??= backgroundTracker()).see(view);
+function trackBackground(thread, view, seq) {
+    (thread.background ??= backgroundTracker()).see(view, seq);
 }
 
 function messageNode(view, s) {
@@ -889,7 +890,7 @@ function renderMessage(thread, view, seq) {
     const box = $('scroll');
     const stick = shown && box.scrollTop + box.clientHeight >= box.scrollHeight - 80;
     if (view?.kind === 'ack' || view?.ack) thread.awaiting = null; // the agent answered outside a turn
-    trackBackground(thread, view);
+    trackBackground(thread, view, seq);
     const node = placeView(thread, view, seq);
     if (node) {
         thread.placeholder?.remove();

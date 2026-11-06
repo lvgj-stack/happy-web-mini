@@ -12,6 +12,9 @@
 //     SendMessage's).
 // An agent is known by its launch call; names, task ids and SendMessage calls
 // are aliases of it.
+//
+// History arrives out of order (the newest page first, older ones on scroll),
+// so events are kept by seq and replayed in order whenever asked.
 
 import { stripTaskNotifications } from './localCommand.js';
 
@@ -19,6 +22,38 @@ const SEND = 'SendMessage';
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 export function backgroundTracker() {
+    const events = new Map(); // seq -> view that launches, resumes or stops something
+    let clearedAt = -Infinity; // the process ended after this seq
+    let maxSeq = -Infinity;
+
+    return {
+        /** Feed every decoded message, in any order. */
+        see(view, seq) {
+            maxSeq = Math.max(maxSeq, seq);
+            if (relevant(view)) events.set(seq, view);
+        },
+        /** What still runs, oldest first. */
+        labels() {
+            const state = replayState();
+            let past = false; // replayed beyond the moment the process ended
+            for (const seq of [...events.keys()].sort((x, y) => x - y)) {
+                if (!past && seq > clearedAt) { state.running.clear(); past = true; }
+                state.see(events.get(seq));
+            }
+            if (!past) state.running.clear();
+            return [...state.running.values()];
+        },
+        /** The process is gone: nothing seen so far runs any more. */
+        clear() { clearedAt = maxSeq; },
+    };
+}
+
+function relevant(view) {
+    if (view?.stops?.length) return true;
+    return view?.kind === 'tool' && !!view.call && !!view.args && (view.args.run_in_background === true || view.name === SEND);
+}
+
+function replayState() {
     const agents = new Map();  // launch call -> { name, label }
     const aliases = new Map(); // call / name / task id -> launch call
     const running = new Map(); // launch call -> label shown
@@ -54,7 +89,7 @@ export function backgroundTracker() {
     }
 
     return {
-        /** Feed every decoded message, in order. */
+        running,
         see(view) {
             if (view?.kind === 'tool' && view.call && view.args) {
                 if (view.args.run_in_background === true) launch(view);
@@ -62,10 +97,6 @@ export function backgroundTracker() {
             }
             for (const s of view?.stops ?? []) stop(s);
         },
-        /** What still runs, oldest first. */
-        labels: () => [...running.values()],
-        /** The process is gone: nothing runs any more. */
-        clear: () => running.clear(),
     };
 }
 
