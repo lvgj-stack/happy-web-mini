@@ -15,6 +15,7 @@ import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from '.
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
+import { backgroundStart, backgroundStops, backgroundText } from './background.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
@@ -821,8 +822,18 @@ function toView(raw) {
 
 const renderable = (view) => !!view && (view.kind === 'image' ? !!view.ref : !!view.text?.trim());
 
-/** A person's message, with the SDK's slash-command records read (see localCommand.js). */
+/**
+ * A person's message, with the SDK's slash-command records read (see localCommand.js).
+ * `stops`: the background tasks its <task-notification>s report as finished.
+ */
 function userView(text) {
+    const view = parseUserText(text);
+    const stops = backgroundStops(text);
+    if (!stops.length) return view;
+    return view ? { ...view, stops } : { kind: 'stops', stops };
+}
+
+function parseUserText(text) {
     const c = parseLocalCommand(text);
     switch (c.kind) {
         case 'hidden':
@@ -831,6 +842,13 @@ function userView(text) {
         case 'command': return { kind: 'user', text: commandText(c), command: c };
         default: return { kind: 'user', text: c.text };
     }
+}
+
+/** Keeps `thread.background` (call -> label) in step with what the agent left running. */
+function trackBackground(thread, view) {
+    const started = backgroundStart(view);
+    if (started) (thread.background ??= new Map()).set(started.call, started.label);
+    for (const call of view?.stops ?? []) thread.background?.delete(call);
 }
 
 function messageNode(view, s) {
@@ -873,6 +891,7 @@ function renderMessage(thread, view, seq) {
     const box = $('scroll');
     const stick = shown && box.scrollTop + box.clientHeight >= box.scrollHeight - 80;
     if (view?.kind === 'ack' || view?.ack) thread.awaiting = null; // the agent answered outside a turn
+    trackBackground(thread, view);
     const node = placeView(thread, view, seq);
     if (node) {
         thread.placeholder?.remove();
@@ -1093,9 +1112,12 @@ function renderThinking() {
     const waiting = awaiting(thread);
     const on = !!(thread && (s.thinking || waiting) && !isArchived(s) && !turnShowsIt);
     renderStop(s, thread, turnShowsIt || on);
+    // Idle, but a subagent or command it started in the background still runs.
+    const background = thread && !on && !turnShowsIt && s.active && !isArchived(s)
+        ? backgroundText([...(thread.background?.values() ?? [])]) : '';
     const node = state.thinkingNode;
-    if (!on) { node?.remove(); return; }
-    const text = s.thinking ? '正在思考' : '等待回复';
+    if (!on && !background) { node?.remove(); return; }
+    const text = background || (s.thinking ? '正在思考' : '等待回复');
     if (node && node.parentElement === thread.el) {
         node.querySelector('.label').textContent = text;
         return;
@@ -1859,6 +1881,7 @@ function onEphemeral(e) {
     const r = $('list').querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
     if (r) { r.classList.toggle('busy', s.thinking); r.title = rowStatus(s); }
     const thread = state.threads.get(s.id);
+    if (changed && !s.active) thread?.background?.clear(); // its process is gone, and the tasks with it
     if (changed && thread?.newest) refreshTurn(thread, thread.newest);
     if (s === state.current) { if (changed) renderHead(); renderThinking(); }
 }
