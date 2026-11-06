@@ -825,6 +825,7 @@ const renderable = (view) => !!view && (view.kind === 'image' ? !!view.ref : !!v
 function userView(text) {
     const c = parseLocalCommand(text);
     switch (c.kind) {
+        case 'hidden':
         case 'caveat': return null;
         case 'output': return c.text ? { kind: 'output', text: c.text } : null;
         case 'command': return { kind: 'user', text: commandText(c), command: c };

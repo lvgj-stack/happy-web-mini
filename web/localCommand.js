@@ -14,7 +14,42 @@ const WRAPPER_TAGS = /<command-(?:message|name|args)>[\s\S]*?<\/command-(?:messa
 const RAW_SLASH = /^\s*\/([a-zA-Z][A-Za-z0-9_:-]*)(?:\s+([\s\S]*?))?\s*$/;
 const GOAL_SET = /^Goal set:\s*([\s\S]*?)\s*$/i;
 
+const NOTE_OPEN = '<task-notification>';
+const NOTE_CLOSE = '</task-notification>';
+
 /**
+ * Drops complete leading `<task-notification>` envelopes (nesting allowed) and
+ * keeps whatever follows. When a background task (subagent, background Bash)
+ * stops, the SDK feeds its result back to the model as a user message wrapped
+ * like this. Port of happy-wire's stripLeadingTaskNotificationWrappers.
+ * Unfinished or inline wrappers are left alone: returns `text` unchanged.
+ */
+export function stripTaskNotifications(text) {
+    let rest = text.trimStart();
+    let stripped = false;
+    while (rest.startsWith(NOTE_OPEN)) {
+        let depth = 1;
+        let cursor = NOTE_OPEN.length;
+        while (depth > 0) {
+            const close = rest.indexOf(NOTE_CLOSE, cursor);
+            if (close === -1) return stripped ? rest : text;
+            const open = rest.indexOf(NOTE_OPEN, cursor);
+            if (open !== -1 && open < close) {
+                depth += 1;
+                cursor = open + NOTE_OPEN.length;
+            } else {
+                depth -= 1;
+                cursor = close + NOTE_CLOSE.length;
+            }
+        }
+        stripped = true;
+        rest = rest.slice(cursor).trimStart();
+    }
+    return stripped ? rest : text;
+}
+
+/**
+ * { kind: 'hidden' }                     only a background task notification, never shown
  * { kind: 'caveat' }                     SDK note, never shown
  * { kind: 'output', text }               a command's output (empty text: nothing to show)
  * { kind: 'command', name, args, raw }   a slash command; raw = typed by a person, not the SDK's record
@@ -22,6 +57,9 @@ const GOAL_SET = /^Goal set:\s*([\s\S]*?)\s*$/i;
  */
 export function parseLocalCommand(text) {
     if (typeof text !== 'string') return { kind: 'text', text: '' };
+    const visible = stripTaskNotifications(text);
+    if (visible !== text && !visible.trim()) return { kind: 'hidden' };
+    text = visible;
     if (CAVEAT.test(text)) return { kind: 'caveat' };
     const out = text.match(STDOUT);
     if (out) {
