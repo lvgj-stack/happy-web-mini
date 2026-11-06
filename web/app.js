@@ -15,6 +15,7 @@ import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from '.
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
+import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
@@ -66,6 +67,8 @@ async function api(method, path, body, auth = true) {
 }
 /** The bearer token, only for URLs on the Happy server itself (never a presigned third party). */
 api.authHeaderFor = (url) => (new URL(url).origin === new URL(state.server).origin ? { Authorization: `Bearer ${state.token}` } : {});
+/** A URL the server built for itself, on our https when it says http (see serverUrl.js). */
+api.ownUrl = (url) => onServerScheme(url, state.server);
 
 function notice(text) {
     const el = $('notice');

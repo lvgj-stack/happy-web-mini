@@ -69,9 +69,10 @@ export async function uploadImage(api, s, image) {
         res = await fetch(upload.uploadUrl, { method: 'POST', body: form });
     } else if (upload.method === 'PUT') {
         // A self-hosted server keeps the file itself and wants the token.
-        res = await fetch(upload.uploadUrl, {
+        const url = api.ownUrl(upload.uploadUrl);
+        res = await fetch(url, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/octet-stream', ...api.authHeaderFor(upload.uploadUrl) },
+            headers: { 'Content-Type': 'application/octet-stream', ...api.authHeaderFor(url) },
             body: sealed,
         });
     } else {
@@ -107,7 +108,8 @@ export function rememberImage(ref, previewUrl) {
 export function imageUrl(api, s, ref, mimeType) {
     if (!cache.has(ref)) {
         cache.set(ref, (async () => {
-            const { downloadUrl } = await api('POST', `/v1/sessions/${encodeURIComponent(s.id)}/attachments/request-download`, { ref });
+            const answer = await api('POST', `/v1/sessions/${encodeURIComponent(s.id)}/attachments/request-download`, { ref });
+            const downloadUrl = api.ownUrl(answer.downloadUrl);
             const res = await fetch(downloadUrl, { headers: api.authHeaderFor(downloadUrl) });
             if (!res.ok) throw new Error(`下载失败（${res.status}）`);
             const bytes = openBlob(new Uint8Array(await res.arrayBuffer()), await blobKey(s.dataKey));
