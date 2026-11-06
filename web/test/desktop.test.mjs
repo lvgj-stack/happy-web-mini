@@ -10,10 +10,11 @@ const bridge = {
     setBadge: (n) => calls.push(['badge', n]),
     notify: (n) => calls.push(['notify', n.id, n.body]),
     attention: () => calls.push(['attention']),
+    setNotifySound: (on) => calls.push(['sound', on]),
     onCommand() {}, onOpenSession() {},
 };
 globalThis.window = { happyDesktop: bridge };
-const { createDesktop, notificationsOn, setNotifications } = await import('../desktop.js');
+const { createDesktop, notificationsOn, notifySoundOn, setNotifications, setNotifySound } = await import('../desktop.js');
 
 const how = (unread, asking, focused = false) => ({
     isUnread: (s) => unread.includes(s.id), isAsking: (s) => asking.includes(s.id), title: (s) => s.id.toUpperCase(), focused,
@@ -71,4 +72,21 @@ test('browser (no bridge): counts the badge for the tab title, sends nothing to 
     assert.equal(web.active, false);
     assert.equal(web.update(S, how(['a'], [])).badge, 1);
     assert.deepEqual(calls, []);
+});
+
+test('Mac app: notifications make a sound by default; the switch silences them and tells the app', () => {
+    const notes = [];
+    const d = createDesktop({ ...bridge, notify: (n) => notes.push(n) });
+    d.update(S, how([], []));
+    d.update(S, how(['a'], []));
+    assert.equal(notifySoundOn(), true);
+    assert.equal(notes[0].silent, false);
+    setNotifySound(false);
+    assert.equal(notifySoundOn(), false);
+    assert.deepEqual(calls.at(-1), ['sound', false], 'the app hears it (for its test notification)');
+    d.update(S, how(['a', 'b'], []));
+    assert.equal(notes[1].silent, true);
+    setNotifySound(true);
+    assert.equal(notifySoundOn(), true);
+    assert.deepEqual(calls.at(-1), ['sound', true]);
 });

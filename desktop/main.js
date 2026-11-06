@@ -169,16 +169,18 @@ const notifications = new Set(); // kept alive so their click handlers fire
 // macOS only delivers notifications from properly signed apps; an ad-hoc
 // build gets 'failed'. Remember it so the Dock bounce stands in for them.
 let notifyError = null;
+// 设置 › 通知 › 带提示音, as the page last told us; the test notification follows it too.
+let notifySilent = false;
 
 function bounceDock() {
     if (isMac && app.dock && !(win && win.isFocused())) app.dock.bounce('informational');
 }
 
 /** Show a system notification; resolves to 'shown', 'failed: <why>' or 'unsupported'. */
-function showNotification({ title, body, id } = {}) {
+function showNotification({ title, body, id, silent } = {}) {
     if (!Notification.isSupported()) { bounceDock(); return Promise.resolve('unsupported'); }
     if (notifyError) bounceDock();
-    const n = new Notification({ title: String(title || 'Happy'), body: String(body || ''), silent: false });
+    const n = new Notification({ title: String(title || 'Happy'), body: String(body || ''), silent: typeof silent === 'boolean' ? silent : notifySilent });
     notifications.add(n);
     const done = () => notifications.delete(n);
     n.on('click', () => { showWindow(); if (id) send('desktop:open-session', String(id)); done(); });
@@ -231,6 +233,7 @@ function bridge() {
     });
     ipcMain.on('desktop:attention', () => bounceDock());
     ipcMain.on('desktop:notify', (_e, note) => { showNotification(note); });
+    ipcMain.on('desktop:notify-sound', (_e, on) => { notifySilent = !on; });
 }
 
 // ---------- Menus ----------

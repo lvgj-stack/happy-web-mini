@@ -50,8 +50,9 @@ export function createDesktop(bridge, notifier = null) {
                 }
             }
             if (notificationsOn()) {
+                const silent = !notifySoundOn();
                 for (const { s, kind } of notified) {
-                    notify?.notify({ id: s.id, title: how.title(s), body: kind === 'asking' ? '在等你回答' : '回复完成' });
+                    notify?.notify({ id: s.id, title: how.title(s), body: kind === 'asking' ? '在等你回答' : '回复完成', silent });
                 }
                 if (notified.some((n) => n.kind === 'asking')) bridge?.attention();
             }
@@ -89,6 +90,19 @@ export function notificationsOn() {
     return notificationsSupported() && localStorage.getItem(NOTIFY_KEY) === '1' && Notification.permission === 'granted';
 }
 
+const SOUND_KEY = 'happy.notifySound';
+
+/** Notifications play the system sound unless turned off in settings (Mac app only; on by default). */
+export function notifySoundOn() {
+    return localStorage.getItem(SOUND_KEY) !== '0';
+}
+
+/** Tell the Mac app whether notifications make a sound (its own test notification follows it too). */
+export function setNotifySound(on) {
+    if (on) localStorage.removeItem(SOUND_KEY); else localStorage.setItem(SOUND_KEY, '0');
+    globalThis.window?.happyDesktop?.setNotifySound?.(on);
+}
+
 /**
  * Turn browser notifications on or off. Turning on asks the browser for
  * permission first; resolves to what it ended up as.
@@ -119,3 +133,4 @@ export function browserNotifier() {
 
 const bridge = globalThis.window?.happyDesktop;
 export const desktop = createDesktop(bridge, bridge || !globalThis.window ? null : browserNotifier());
+bridge?.setNotifySound?.(notifySoundOn()); // the app starts with sound on; bring it in line with settings

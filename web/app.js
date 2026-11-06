@@ -9,7 +9,7 @@ import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
 import { addCopyButtons, handleCopyClicks } from './clipboard.js';
 import { answerCall, canSubmit, declineCall, pendingQuestions, toggle } from './questions.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
-import { desktop, notificationsOn, notificationsSupported, setNotifications } from './desktop.js';
+import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
@@ -1623,6 +1623,10 @@ function renderNotifySetting(problem) {
     const blocked = supported && Notification.permission === 'denied';
     toggle.checked = notificationsOn();
     toggle.disabled = !supported;
+    // Sound: the Mac app only (a browser's `silent` is not reliably honoured).
+    $('notify-sound-row').hidden = !desktop.active;
+    $('notify-sound').checked = notifySoundOn();
+    $('notify-sound').disabled = !toggle.checked;
     hint.textContent = !supported ? '这个页面不能发通知：需要用 https 或 localhost 打开（ssh 转发到 localhost 就行）。'
         : blocked || problem === 'denied' ? '浏览器拦掉了这个网站的通知。点地址栏左边的网站设置，把「通知」改成允许，再回来打开。'
         : desktop.active ? DESKTOP_NOTIFY_HINT : NOTIFY_HINT;
@@ -2111,6 +2115,10 @@ $('notify-toggle').addEventListener('change', async () => {
     const result = await setNotifications($('notify-toggle').checked);
     renderNotifySetting(result);
     if (result === 'on' || result === 'off') settingsSaved();
+});
+$('notify-sound').addEventListener('change', () => {
+    setNotifySound($('notify-sound').checked);
+    settingsSaved();
 });
 applyBrand();
 document.addEventListener('visibilitychange', () => markRead(state.current));

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('happyDesktop', {
     setBadge: (count) => ipcRenderer.send('desktop:badge', count),
     attention: () => ipcRenderer.send('desktop:attention'),
     notify: (note) => ipcRenderer.send('desktop:notify', note),
+    setNotifySound: (on) => ipcRenderer.send('desktop:notify-sound', !!on),
     onCommand: (fn) => ipcRenderer.on('desktop:command', (_e, name) => fn(name)),
     onOpenSession: (fn) => ipcRenderer.on('desktop:open-session', (_e, id) => fn(id)),
 });
