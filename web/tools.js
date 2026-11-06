@@ -31,6 +31,7 @@ import Copy from './node_modules/lucide-static/dist/esm/icons/copy.mjs';
 import Check from './node_modules/lucide-static/dist/esm/icons/check.mjs';
 import Folder from './node_modules/lucide-static/dist/esm/icons/folder.mjs';
 import GitBranch from './node_modules/lucide-static/dist/esm/icons/git-branch.mjs';
+import RotateCcw from './node_modules/lucide-static/dist/esm/icons/rotate-ccw.mjs';
 
 const ICONS = {
     terminal: SquareTerminal,
@@ -44,6 +45,7 @@ const ICONS = {
     tool: Wrench,
     image: ImagePlus,
     archive: Archive,
+    resume: RotateCcw,
     send: ArrowUp,
     computer: Monitor,
     stop: Square,

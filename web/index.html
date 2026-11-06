@@ -354,7 +354,11 @@
   .thumb .remove:hover { background: var(--ink); }
   #attach { padding: 4px 0; }
   #input { display: block; width: 100%; border: 0; outline: none; resize: none; font: inherit; font-size: 15px; color: inherit; background: none; min-height: 84px; max-height: 40vh; padding: 4px 0; }
-  #readonly { color: var(--muted); font-size: 14px; padding-bottom: 24px; }
+  #readonly { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 14px; padding-bottom: 24px; }
+  #readonly[hidden] { display: none; }
+  #resume { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 14px; }
+  #resume:disabled { opacity: .5; cursor: default; }
+  #resume svg { width: 15px; height: 15px; }
 
   /* Slash command suggestions */
   #composer { position: relative; }
@@ -469,7 +473,11 @@
         </div>
       </div>
     </div>
-    <p class="column" id="readonly" hidden>已归档，只读。</p>
+    <div class="column" id="readonly" hidden>
+      <span id="readonly-text"></span>
+      <button id="resume" class="primary" type="button"></button>
+      <span id="resume-why"></span>
+    </div>
     <section class="column" id="settings-page" aria-labelledby="settings-title">
       <div class="settings-head">
         <button id="settings-back" class="quiet"></button>

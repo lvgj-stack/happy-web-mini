@@ -16,6 +16,7 @@ import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNot
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
+import { resumeAvailability, resumeFallback } from './resume.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
@@ -44,6 +45,9 @@ const state = {
     collapsed: new Set(JSON.parse(localStorage.getItem('happy.collapsed') || '[]')),
     archivedOpen: localStorage.getItem('happy.archivedOpen') === '1', // the 已归档 group; closed by default
     archivedShown: ARCHIVED_PAGE, // how many archived rows the open group lists
+    machines: null,          // the account's computers, for 恢复会话 (see refreshMachines)
+    machinesAt: 0,
+    machinesLoading: null,
     listSignature: null,
     seen: JSON.parse(localStorage.getItem('happy.seen') || '{}'), // session id -> newest seq seen in this browser
     drafts: new Map(),       // session id -> unsent composer text
@@ -593,8 +597,10 @@ function renderHead() {
     const s = state.current;
     $('archive').hidden = !s || isArchived(s);
     renderArchiveButton();
-    $('composer').hidden = !s || isArchived(s);
-    $('readonly').hidden = !s || !isArchived(s);
+    // Archived, or its CLI is gone: nothing would pick a message up, so offer to bring it back instead.
+    $('composer').hidden = !s || isDisconnected(s);
+    $('readonly').hidden = !s || !isDisconnected(s);
+    renderResume();
     if (!s) {
         $('chat-title').textContent = '';
         $('chat-sub').replaceChildren();
@@ -604,6 +610,78 @@ function renderHead() {
     const { shortPath } = place(s);
     const status = isArchived(s) ? '已归档' : s.active ? '在线' : '离线';
     $('chat-sub').replaceChildren(...[s.meta.host, shortPath, status].filter(Boolean).map((t) => el('span', null, t)));
+}
+
+// ---------- Resume ----------
+
+const isDisconnected = (s) => isArchived(s) || !s.active;
+const MACHINES_FRESH = 15000;
+
+/** The account's computers, cached briefly: whether one is online decides if a session can come back. */
+function refreshMachines(force = false) {
+    if (!force && state.machines && Date.now() - state.machinesAt < MACHINES_FRESH) return Promise.resolve(state.machines);
+    state.machinesLoading ??= loadMachines()
+        .then((list) => { state.machines = list; state.machinesAt = Date.now(); return list; })
+        .finally(() => { state.machinesLoading = null; });
+    return state.machinesLoading;
+}
+
+const machineOf = (s) => state.machines?.find((m) => m.id === s.meta.machineId) ?? null;
+
+/** The bar in place of the composer: 已归档 / 离线, and 恢复会话 when it can be offered. */
+function renderResume() {
+    const s = state.current;
+    if (!s || !isDisconnected(s)) return;
+    $('readonly-text').textContent = isArchived(s) ? '已归档' : '离线';
+    const a = resumeAvailability(s, machineOf(s));
+    const known = !!state.machines;
+    const button = $('resume');
+    button.hidden = !a.show;
+    button.disabled = !!s.resuming || !a.ok || !known;
+    setButton(button, 'resume', s.resuming ? '正在恢复…' : '恢复会话', !!s.resuming);
+    $('resume-why').textContent = a.show && known && !a.ok ? a.reason : '';
+    if (!known || Date.now() - state.machinesAt >= MACHINES_FRESH) {
+        refreshMachines().then(() => { if (state.current === s) renderResume(); }).catch((e) => console.error(e));
+    }
+}
+
+/** Bring an archived or offline session back on its computer, in the same session (history kept). */
+async function resumeSession(s) {
+    if (!s || s.resuming || !isDisconnected(s)) return;
+    s.resuming = true;
+    renderResume();
+    try {
+        const m = (await refreshMachines(true)).find((x) => x.id === s.meta.machineId) ?? null;
+        const a = resumeAvailability(s, m);
+        if (!a.ok) throw new Error(a.reason || '现在无法恢复');
+        const params = { sessionId: s.id, fallback: resumeFallback(s, b64(s.dataKey)), fallbackReason: 'ok' };
+        try {
+            const mode = chosenModeMeta(s);
+            if (typeof mode.model === 'string') params.model = mode.model;
+            if (typeof mode.permissionMode === 'string') params.permissionMode = mode.permissionMode;
+        } catch { /* the daemon falls back to the session's own */ }
+        const r = await machineRpc(m, 'resume-happy-session', params);
+        if (r?.type === 'error') throw new Error(r.errorMessage || '恢复失败');
+        if (r?.type === 'requestToApproveDirectoryCreation') throw new Error('会话所在的目录已经不在了');
+        if (!(await waitUntilBack(s))) throw new Error('电脑已经在恢复，但会话还没有连上，稍后再看看');
+        notice('');
+    } catch (e) {
+        notice(`恢复失败：${e.message}`);
+    } finally {
+        s.resuming = false;
+        renderList();
+        if (s === state.current) renderHead();
+    }
+}
+
+/** Waits for the reattached CLI to report in (it marks the session running again). */
+async function waitUntilBack(s) {
+    for (let i = 0; i < 30; i++) {
+        if (s.active && !isArchived(s)) return true;
+        await new Promise((r) => setTimeout(r, 1000));
+        await syncSessions().catch((e) => console.error(e));
+    }
+    return s.active && !isArchived(s);
 }
 
 // ---------- Messages ----------
@@ -1866,6 +1944,7 @@ async function onUpdate(body) {
 }
 
 function onEphemeral(e) {
+    if (e?.type === 'machine-activity') return onMachineActivity(e);
     if (e?.type !== 'activity') return;
     const s = state.sessions.get(e.id);
     if (!s) return;
@@ -1883,6 +1962,14 @@ function onEphemeral(e) {
     if (changed && !s.active) thread?.background?.clear(); // its process is gone, and the tasks with it
     if (changed && thread?.newest) refreshTurn(thread, thread.newest);
     if (s === state.current) { if (changed) renderHead(); renderThinking(); }
+}
+
+/** A computer came online or went away: whether its sessions can be resumed follows. */
+function onMachineActivity(e) {
+    const m = state.machines?.find((x) => x.id === e.id);
+    if (!m || m.online === !!e.active) return;
+    m.online = !!e.active;
+    if (state.current && isDisconnected(state.current)) renderResume();
 }
 
 async function getSocket() {
@@ -2028,6 +2115,7 @@ function sessionMenu(s) {
         { label: '复制目录路径', icon: 'copy', hidden: !s.meta.path, action: () => copyFromMenu(s.meta.path) },
         { label: '复制会话 ID', icon: 'copy', action: () => copyFromMenu(s.id) },
         '-',
+        { label: s.resuming ? '正在恢复…' : '恢复会话', icon: 'resume', hidden: !isDisconnected(s) || !resumeAvailability(s, machineOf(s)).show, disabled: s.resuming || !resumeAvailability(s, machineOf(s)).ok, action: () => resumeSession(s) },
         { label: s.archiving ? '正在归档…' : '归档', icon: 'archive', danger: true, hidden: archived, disabled: s.archiving, action: () => archiveSession(s) },
     ];
 }
@@ -2059,6 +2147,7 @@ function groupMenu(head) {
 $('list').addEventListener('contextmenu', (e) => {
     const r = e.target.closest('.row');
     const s = r && state.sessions.get(r.dataset.id);
+    if (s && isDisconnected(s)) refreshMachines().catch((err) => console.error(err)); // for 恢复会话 next time, if stale now
     if (s) return openMenu(e, sessionMenu(s), r);
     const head = e.target.closest('.group-head, .tree-head');
     if (head) openMenu(e, groupMenu(head), head);
@@ -2478,6 +2567,7 @@ $('new-cancel').onclick = () => $('new-session').close();
 $('new-machine').onchange = () => { $('new-dir').value = ''; renderNewForm(); };
 $('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
+$('resume').onclick = () => resumeSession(state.current);
 $('send').onclick = send;
 $('attach').onclick = () => $('file').click();
 $('file').onchange = () => { addImages([...$('file').files]); $('file').value = ''; };
