@@ -35,6 +35,15 @@ const nonEmpty = (...values) => values.find((v) => typeof v === 'string' && v.tr
 export const isRig = (meta) => meta?.client?.id === 'rig';
 
 /**
+ * Codex only: 跟随 Codex 配置. Happy CLI otherwise starts Codex on its own
+ * built-in default (a GPT model); an explicit `model: null` makes it leave the
+ * model out, so Codex takes model and provider from its config.toml.
+ */
+export const CODEX_CONFIG = 'codex-config';
+const CODEX_CONFIG_OPTION = { key: CODEX_CONFIG, name: '跟随 Codex 配置', model: null };
+const withCodexConfig = (flavor, options) => (flavor === 'codex' ? [CODEX_CONFIG_OPTION, ...options] : options);
+
+/**
  * Options for a session: [{ key, name, model, providerId? }].
  * `key` is what the picker stores; `model`/`providerId` go into message meta.
  */
@@ -51,9 +60,9 @@ export function modelOptions(meta) {
     const fromCli = (meta?.models ?? [])
         .filter((m) => typeof m?.code === 'string')
         .map((m) => ({ key: m.code, name: m.value || m.code, model: m.code }));
-    if (fromCli.length) return fromCli;
     const flavor = meta?.flavor || 'claude';
-    return (HARDCODED[flavor] ?? []).map(([key, name]) => ({ key, name, model: key }));
+    if (fromCli.length) return withCodexConfig(flavor, fromCli);
+    return withCodexConfig(flavor, (HARDCODED[flavor] ?? []).map(([key, name]) => ({ key, name, model: key })));
 }
 
 /** The model the session reports it is on, as an option key, if any. */
@@ -67,7 +76,7 @@ export function currentModelKey(meta) {
     return nonEmpty(meta?.currentModelCode, meta?.modelMode) ?? null;
 }
 
-/** Message meta fields for a chosen option (nothing when none was chosen). */
+/** Message meta fields for a chosen option (nothing when none was chosen; `model: null` for 跟随 Codex 配置). */
 export function modelMeta(option) {
     if (!option) return {};
     return option.providerId ? { model: option.model, modelProviderId: option.providerId } : { model: option.model };
@@ -125,5 +134,5 @@ export const DEFAULT_AGENTS = [
 
 /** [{ key, name, model }] an agent's hardcoded catalog (the same lists the composer falls back to). */
 export function agentModelOptions(agent) {
-    return (HARDCODED[agent] ?? []).map(([key, name]) => ({ key, name, model: key }));
+    return withCodexConfig(agent, (HARDCODED[agent] ?? []).map(([key, name]) => ({ key, name, model: key })));
 }

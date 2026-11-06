@@ -1236,6 +1236,8 @@ function chosenModeMeta(s) {
     const effort = chosenEffort(s) || defaultsFor(s.meta, effectiveModelKey(s)).effort;
     // A level the (newly chosen) model does not take is left out, not sent.
     if (effort && effortOptions(s.meta, effectiveModelKey(s)).includes(effort)) meta.effort = effort;
+    // 跟随 Codex 配置 with no level picked: clear Happy's default effort too, so config.toml's applies.
+    else if (meta.model === null) meta.effort = null;
     return meta;
 }
 

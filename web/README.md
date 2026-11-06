@@ -30,6 +30,9 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
   点后变成对勾 1.5 秒。https / localhost / Mac 应用里用 Clipboard API，http 下退回 `execCommand('copy')`；触屏设备上按钮常驻
 - 换模型和思考强度：输入框下方选择，记在本机（按会话），随消息放进 `meta.model` / `meta.effort`
   （Happy Agent 会话再带 `modelProviderId`）；强度档位随模型变化
+- Codex 的模型列表最前面是「跟随 Codex 配置」（输入框下方和设置页的默认模型都能选）：发 `model: null`（没选强度时再加 `effort: null`），
+  Happy CLI 就不再用它内置的默认模型（1.2.6 是 `gpt-6.1-sol`）和默认强度，Codex 按那台电脑 `~/.codex/config.toml` 里的
+  `model` / `model_provider` / `model_reasoning_effort` 来。模型在 Codex 建 thread 时就定了，要在会话的第一条消息（或 `/clear` 之后）就是这个选项才生效
 - 工具调用按轮次折叠：一轮里的中间文字和工具调用收在「已工作 7分2秒」下面，最后的回答留在外面；进行中显示
   「正在工作 12秒」实时走秒，正在跑的工具也显示已用时间，结束后自动折叠。工具行是图标加命令/路径/搜索词，点开看完整参数
 - 回答 agent 的提问：Claude 的 AskUserQuestion（`agentState.requests`，经 `permission` RPC 带 `updatedInput.answers`
