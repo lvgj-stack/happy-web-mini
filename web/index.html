@@ -220,6 +220,9 @@
   .msg { white-space: pre-wrap; overflow-wrap: anywhere; }
   .msg.agent { margin: 16px 0; }
   .msg.user { margin: 20px 0 20px auto; width: fit-content; max-width: 85%; background: var(--moss-tint); padding: 8px 14px; border-radius: 10px; }
+  /* When it was sent: a quiet line under the bubble, out of the copied text */
+  .msg.user[data-time], figure.msg.image.mine[data-time] { position: relative; margin-bottom: 30px; }
+  .msg.user[data-time]::after, figure.msg.image.mine[data-time]::after { content: attr(data-time); position: absolute; top: 100%; right: 2px; margin-top: 3px; font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap; }
   .msg.tool { color: var(--muted); font-size: 15px; line-height: 1.6; border-left: 2px solid var(--rule); padding-left: 10px; margin: 2px 0; }
   .msg.tool + .msg.agent, .msg.agent + .msg.tool { margin-top: 12px; }
   .msg.meta { color: var(--muted); font-size: 15px; margin: 12px 0; }
@@ -288,12 +291,14 @@
   .code-copy { background: #F6F7F4; }
   .code-block:hover .code-copy { opacity: 1; }
   .msg.agent { position: relative; }
-  .markdown-body > :nth-last-child(2):has(+ .msg-copy) { margin-bottom: 0 !important; }
+  .markdown-body > :has(+ .msg-copy) { margin-bottom: 0 !important; }
   .msg-copy { position: absolute; top: 100%; left: -4px; z-index: 1; }
+  .msg-time { position: absolute; top: 100%; left: 24px; font-size: 12px; line-height: 24px; color: var(--muted); white-space: nowrap; }
   .msg.agent:hover > .msg-copy { opacity: 1; }
   @media (hover: none) {
     .copy-btn { opacity: 1; }
     .msg-copy { position: static; margin: 2px 0 0 -4px; }
+    .msg-time { position: static; margin-left: 4px; vertical-align: top; }
   }
   .markdown-body table { font-size: 16px; }
   .markdown-body table tr { background: transparent; }

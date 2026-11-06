@@ -17,6 +17,7 @@ import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
 import { resumeAvailability, resumeFallback } from './resume.js';
+import { messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, repoOf } from './worktree.js';
@@ -777,8 +778,13 @@ async function fillViewport(s, thread) {
 function decodePage(s, messages) {
     return Promise.all(messages.map(async (m) => ({
         m,
-        view: toView(m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null),
+        view: withSentAt(toView(m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null), m),
     })));
+}
+
+/** The server's record time rides along: when a person's message was sent. */
+function withSentAt(view, m) {
+    return view && m.createdAt ? { ...view, at: m.createdAt } : view;
 }
 
 /** One page further back in history, prepended without moving what is on screen. */
@@ -841,7 +847,7 @@ async function acceptMessage(s, m) {
     if (thread.seen.has(m.id)) return;
     thread.seen.add(m.id);
     const raw = m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null;
-    renderMessage(thread, toView(raw), m.seq);
+    renderMessage(thread, withSentAt(toView(raw), m), m.seq);
 }
 
 const EVENT_TEXT = {
@@ -932,6 +938,7 @@ function messageNode(view, s) {
     if (view.kind === 'output') return el('pre', 'msg output', view.text);
     if (view.kind === 'image') {
         const node = el('figure', `msg image${view.mine ? ' mine' : ''}`);
+        if (view.mine && view.at) node.dataset.time = messageTime(view.at);
         const link = el('a');
         link.target = '_blank';
         link.rel = 'noopener';
@@ -960,7 +967,9 @@ function messageNode(view, s) {
         node.innerHTML = renderInlineMarkdown(view.text);
         return node;
     }
-    return el('div', `msg ${view.kind}`, view.text);
+    const node = el('div', `msg ${view.kind}`, view.text);
+    if (view.kind === 'user' && view.at) node.dataset.time = messageTime(view.at);
+    return node;
 }
 
 function renderMessage(thread, view, seq) {
@@ -1041,7 +1050,7 @@ function insertBySeq(container, node, seq) {
 function createTurn(thread, turn, seq) {
     const block = {
         turn, seq, maxSeq: seq,
-        start: null, end: null, first: null, last: 0, // times (ms)
+        start: null, end: null, first: null, last: 0, lastAt: 0, // times (ms); lastAt: the server's, a fallback
         ended: false, collapsed: false, userToggled: false,
         tools: new Map(), endedCalls: new Set(),
     };
@@ -1065,6 +1074,7 @@ function addToTurn(thread, block, view, seq) {
     block.el.dataset.seq = String(block.seq);
     const previous = thread.newest;
     if (!thread.newest || block.maxSeq >= thread.newest.maxSeq) thread.newest = block;
+    if (view.at) block.lastAt = Math.max(block.lastAt, view.at);
     if (view.time) {
         block.first = Math.min(block.first ?? view.time, view.time);
         block.last = Math.max(block.last, view.time);
@@ -1136,6 +1146,19 @@ function refreshTurn(thread, block) {
     block.head.hidden = !running && block.body.childElementCount === 0; // a plain answer needs no fold
     if (!block.userToggled) setCollapsed(block, !running);
     tickTurn(block, running);
+    // No fold to carry the finish time: the answer shows it, by its copy button.
+    const answer = block.final.firstElementChild;
+    let stamp = answer?.querySelector(':scope > .msg-time');
+    const when = block.head.hidden ? finishedAt(block) : '';
+    if (when && answer) {
+        stamp ??= answer.appendChild(el('span', 'msg-time'));
+        stamp.textContent = when;
+    } else stamp?.remove();
+}
+
+/** When a finished turn ended, as the chat shows it ('' if unknown). */
+function finishedAt(block) {
+    return messageTime(block.end || block.last || block.lastAt);
 }
 
 /** Header text and the clocks of tools still running. */
@@ -1144,7 +1167,7 @@ function tickTurn(block, running = block.el.classList.contains('running')) {
     const start = block.start ?? block.first ?? now;
     block.label.textContent = running
         ? `正在工作 ${formatDuration(now - start)}`
-        : `已工作 ${formatDuration((block.end ?? block.last ?? start) - start)}`;
+        : `已工作 ${formatDuration((block.end ?? block.last ?? start) - start)}${finishedAt(block) ? ` · ${finishedAt(block)}` : ''}`;
     if (!running) return;
     for (const row of block.tools.values()) {
         if (!row.classList.contains('done')) row.querySelector('.time').textContent = formatDuration(now - Number(row.dataset.time));
