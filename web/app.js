@@ -481,7 +481,7 @@ function renderList() {
         const rows = el('div', 'rows');
         if (m.bots.length) rows.append(kindBlock('Bot', 'agent', m.bots.map((s) => row(s))));
         if (m.tasks.length) rows.append(kindBlock('任务', 'todo', m.tasks.map((s) => row(s, taskPath(s)))));
-        if (m.projects.length) rows.append(kindBlock('对话', 'chats', m.projects.map((p) => {
+        if (m.projects.length) rows.append(kindBlock(null, null, m.projects.map((p) => {
             const key = `${m.key}\u0000${p.id}`;
             const worktrees = p.worktrees.map((w) => treeNode(`${key}\u0000${w.id}`, 'worktree', 'branch', w.name, w.id, w.sessions,
                 w.sessions.map((s) => row(s))));
@@ -504,13 +504,16 @@ function toggleCollapsed(key) {
 /** Happy Desktop's place for a task: its folder under ~/Tasks. */
 const taskPath = (s) => (s.meta.task.folderName ? `~/Tasks/${s.meta.task.folderName}` : '~/Tasks');
 
-/** One kind of session inside a computer (Bot / 任务 / 对话), under a small label. */
+/** One kind of session inside a computer: Bot / 任务 under a small label; the project tree goes without one. */
 function kindBlock(label, icon, children) {
     const block = el('div', 'kind');
-    const head = el('div', 'kind-head');
-    head.insertAdjacentHTML('beforeend', iconSvg(icon, 13));
-    head.append(el('span', null, label));
-    block.append(head, ...children);
+    if (label) {
+        const head = el('div', 'kind-head');
+        head.insertAdjacentHTML('beforeend', iconSvg(icon, 13));
+        head.append(el('span', null, label));
+        block.append(head);
+    }
+    block.append(...children);
     return block;
 }
 

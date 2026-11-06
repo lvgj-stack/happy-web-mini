@@ -15,8 +15,8 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 
 - 登录：扫码关联（手机 App › 关联新设备，扫 `happy:///account?…`），或粘贴备份密钥
 - 会话列表只显示在线会话（`active` 且 15 分钟内有活动，未归档，非侧聊），按电脑分组（可折叠）。每台电脑下分
-  「Bot」（metadata 里有 `bot`，Happy Agent 的 bot，按 `orderKey` 排）、「任务」（有 `task`，显示 `~/Tasks/…`）和「对话」三类，
-  和官方 App 的判断一样。「对话」是树形的：项目目录 › 它自己的会话，再下一层是各个 worktree › 会话；
+  「Bot」（metadata 里有 `bot`，Happy Agent 的 bot，按 `orderKey` 排）和「任务」（有 `task`，显示 `~/Tasks/…`），
+  和官方 App 的判断一样；其余会话不加标签，直接排成树：项目目录 › 它自己的会话，再下一层是各个 worktree › 会话；
   Happy Agent 会话按它上报的 `project` / `workspace` 分，其他按目录分，`.dev/worktree/*` 归到所属仓库的 worktree 节点下。
   项目和 worktree 都能单独折叠（记在本浏览器），折起来时里面有等你回答或未读的会话，标题后面亮个点。
   排序只用名字、`orderKey` 和创建时间，心跳不会打乱顺序
