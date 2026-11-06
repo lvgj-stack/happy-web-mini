@@ -3,10 +3,11 @@
 // picked in the composer; Happy Agent sessions have their own catalog and
 // never take them.
 import { DEFAULT_AGENTS, effortOptions, isRig, modelOptions } from './models.js';
+import { permissionOptions } from './permissions.js';
 
 const KEY = 'happy.defaults';
 
-/** { claude: { model?, effort? }, codex: {...}, gemini: {...} } */
+/** { claude: { model?, effort?, permission? }, codex: {...}, gemini: {...} } */
 export function loadDefaults() {
     try {
         return JSON.parse(localStorage.getItem(KEY) || '{}') ?? {};
@@ -34,12 +35,12 @@ const agentOf = (meta) => {
 };
 
 /**
- * The defaults that apply to a session: { modelKey, effort } (either may be null).
+ * The defaults that apply to a session: { modelKey, effort, permission } (any may be null).
  * A default the session cannot take (not in its model list, or an effort its
  * model lacks) is left out rather than sent.
  */
 export function defaultsFor(meta, modelKeyForEffort) {
-    const none = { modelKey: null, effort: null };
+    const none = { modelKey: null, effort: null, permission: null };
     if (isRig(meta)) return none;
     const agent = agentOf(meta);
     if (!agent) return none;
@@ -47,5 +48,6 @@ export function defaultsFor(meta, modelKeyForEffort) {
     const modelKey = d.model && modelOptions(meta).some((o) => o.key === d.model) ? d.model : null;
     const effortModel = modelKeyForEffort ?? modelKey ?? '';
     const effort = d.effort && effortOptions(meta, effortModel).includes(d.effort) ? d.effort : null;
-    return { modelKey, effort };
+    const permission = d.permission && permissionOptions(meta).some((o) => o.key === d.permission) ? d.permission : null;
+    return { modelKey, effort, permission };
 }

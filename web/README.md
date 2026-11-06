@@ -30,6 +30,10 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
   点后变成对勾 1.5 秒。https / localhost / Mac 应用里用 Clipboard API，http 下退回 `execCommand('copy')`；触屏设备上按钮常驻
 - 换模型和思考强度：输入框下方选择，记在本机（按会话），随消息放进 `meta.model` / `meta.effort`
   （Happy Agent 会话再带 `modelProviderId`）；强度档位随模型变化
+- 权限模式：输入框下方第三个下拉（设置页也能给每个 agent 设默认），随消息放进 `meta.permissionMode`，不选就不带、由 Happy CLI 决定。
+  Claude：默认 / 自动接受编辑（`acceptEdits`）/ 计划模式（`plan`）/ YOLO（`bypassPermissions`）；Codex：自动（`auto`，CLI 的默认）/ 谨慎（`default`）/
+  只读（`read-only`）/ 工作区放行（`safe-yolo`）/ YOLO（`yolo`）；Gemini：默认 / 只读 / 工作区放行 / YOLO。Happy Agent 会话不显示。
+  批准 Claude 的计划后，这个会话的选择自动改成「默认」（CLI 也会退出计划模式，不然下一条又会带 `plan` 回去）。CLI 不接受 Claude 从 YOLO 直接降回「默认」，要降级选「自动接受编辑」或「计划模式」
 - Codex 的模型列表最前面是「跟随 Codex 配置」（输入框下方和设置页的默认模型都能选）：发 `model: null`（没选强度时再加 `effort: null`），
   Happy CLI 就不再用它内置的默认模型（1.2.6 是 `gpt-6.1-sol`）和默认强度，Codex 按那台电脑 `~/.codex/config.toml` 里的
   `model` / `model_provider` / `model_reasoning_effort` 来。模型在 Codex 建 thread 时就定了，要在会话的第一条消息（或 `/clear` 之后）就是这个选项才生效

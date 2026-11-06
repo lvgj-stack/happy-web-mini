@@ -10,6 +10,7 @@ import { addCopyButtons, copyText, handleCopyClicks } from './clipboard.js';
 import { openMenu } from './contextmenu.js';
 import { answerCall, canSubmit, declineCall, pendingQuestions, toggle } from './questions.js';
 import { approvalCall, canApproveForSession, describeApproval, pendingApprovals } from './approvals.js';
+import { agentPermissionOptions, permissionOptions } from './permissions.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
@@ -1179,7 +1180,7 @@ function effectiveModelKey(s) {
 function renderModelPicker() {
     const s = state.current;
     const picker = $('model');
-    if (!s) { picker.hidden = true; $('effort').hidden = true; return; }
+    if (!s) { picker.hidden = true; $('effort').hidden = true; $('permission').hidden = true; return; }
     const options = modelOptions(s.meta);
     const chosen = chosenModelKey(s);
     const current = currentModelKey(s.meta);
@@ -1199,6 +1200,7 @@ function renderModelPicker() {
     picker.value = chosen && known.has(chosen) ? chosen : '';
     picker.hidden = options.length === 0;
     renderEffortPicker();
+    renderPermissionPicker();
     renderUsage();
 }
 
@@ -1217,6 +1219,40 @@ function renderUsage() {
     box.replaceChildren(...parts);
     box.title = '订阅用量（这台电脑上登录的 Claude 账号）\n' + usageTooltip(usage);
     box.hidden = false;
+}
+
+const chosenPermission = (s) => localStorage.getItem(`happy.permission.${s.id}`);
+
+function setChosenPermission(s, mode) {
+    if (mode) localStorage.setItem(`happy.permission.${s.id}`, mode); else localStorage.removeItem(`happy.permission.${s.id}`);
+}
+
+/** The permission mode messages go out with: picked here, else the agent's default, else none (the CLI keeps its own). */
+function effectivePermission(s) {
+    const mode = chosenPermission(s) || defaultsFor(s.meta).permission;
+    return mode && permissionOptions(s.meta).some((o) => o.key === mode) ? mode : null;
+}
+
+function renderPermissionPicker() {
+    const s = state.current;
+    const picker = $('permission');
+    const options = s ? permissionOptions(s.meta) : [];
+    const fallback = s ? defaultsFor(s.meta).permission : null;
+    const fallbackName = fallback && options.find((o) => o.key === fallback)?.name;
+    picker.replaceChildren();
+    const first = el('option', null, fallbackName ? `默认：${fallbackName}` : '默认权限');
+    first.value = '';
+    picker.append(first);
+    for (const o of options) {
+        const opt = el('option', null, o.name);
+        opt.value = o.key;
+        opt.title = o.description;
+        picker.append(opt);
+    }
+    const chosen = s && chosenPermission(s);
+    picker.value = chosen && options.some((o) => o.key === chosen) ? chosen : '';
+    picker.title = (options.find((o) => o.key === (picker.value || fallback))?.description) || '权限模式：不指定时由 Happy CLI 决定';
+    picker.hidden = options.length === 0;
 }
 
 function renderEffortPicker() {
@@ -1248,6 +1284,8 @@ function chosenModeMeta(s) {
     if (effort && effortOptions(s.meta, effectiveModelKey(s)).includes(effort)) meta.effort = effort;
     // 跟随 Codex 配置 with no level picked: clear Happy's default effort too, so config.toml's applies.
     else if (meta.model === null) meta.effort = null;
+    const permission = effectivePermission(s);
+    if (permission) meta.permissionMode = permission;
     return meta;
 }
 
@@ -1586,7 +1624,14 @@ function approvalCard(s, set, more) {
         buttons.splice(1, 0, session);
     }
     deny.onclick = () => replyAsk(s, set, approvalCall(set, 'deny'), buttons);
-    allow.onclick = () => replyAsk(s, set, approvalCall(set, 'allow'), buttons);
+    allow.onclick = () => {
+        // The CLI leaves plan mode once a plan is approved; stop sending `plan` with every message, or it goes straight back.
+        if ((set.tool === 'ExitPlanMode' || set.tool === 'exit_plan_mode') && effectivePermission(s) === 'plan') {
+            setChosenPermission(s, 'default');
+            renderPermissionPicker();
+        }
+        replyAsk(s, set, approvalCall(set, 'allow'), buttons);
+    };
     actions.append(...buttons);
     card.append(actions);
     return card;
@@ -1683,9 +1728,24 @@ function renderSettings() {
         effort.hidden = levels.length === 0;
         effort.onchange = () => { saveDefault(agent.id, 'effort', effort.value); settingsSaved(); };
 
+        const modes = agentPermissionOptions(agent.id);
+        const permission = el('select', 'field');
+        permission.setAttribute('aria-label', `${agent.name} 默认权限`);
+        const nonePermission = el('option', null, '不指定');
+        nonePermission.value = '';
+        permission.append(nonePermission);
+        for (const o of modes) {
+            const opt = el('option', null, `${o.name}：${o.description}`);
+            opt.value = o.key;
+            permission.append(opt);
+        }
+        permission.value = d.permission && modes.some((o) => o.key === d.permission) ? d.permission : '';
+        permission.onchange = () => { saveDefault(agent.id, 'permission', permission.value); settingsSaved(); };
+
         const fields = el('div', 'default-fields');
         fields.append(labelled('模型', model));
         if (levels.length) fields.append(labelled('强度', effort));
+        if (modes.length) fields.append(labelled('权限', permission));
         rowEl.append(fields);
         box.append(rowEl);
     }
@@ -2430,6 +2490,12 @@ $('effort').onchange = () => {
     if (!s) return;
     const level = $('effort').value;
     if (level) localStorage.setItem(`happy.effort.${s.id}`, level); else localStorage.removeItem(`happy.effort.${s.id}`);
+};
+$('permission').onchange = () => {
+    const s = state.current;
+    if (!s) return;
+    setChosenPermission(s, $('permission').value);
+    renderPermissionPicker();
 };
 $('back').onclick = () => document.body.classList.remove('in-chat');
 $('input').addEventListener('input', () => { autosize(); renderSlash(); renderActions(); });

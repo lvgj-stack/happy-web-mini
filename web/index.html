@@ -341,8 +341,8 @@
   #usage .u-over { color: var(--error); font-weight: 600; }
   #usage .u-reset, #usage .u-when { color: #A5ABA5; }
   @media (max-width: 760px) { #usage .u-when { display: none; } }
-  #model, #effort { max-width: 45%; font: inherit; font-size: 14px; color: var(--muted); background: none; border: 0; padding: 4px 0; cursor: pointer; }
-  #model:hover, #effort:hover { color: var(--ink); }
+  #model, #effort, #permission { max-width: 32%; font: inherit; font-size: 14px; color: var(--muted); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+  #model:hover, #effort:hover, #permission:hover { color: var(--ink); }
   #composer .box:focus-within { border-color: var(--moss); }
   #composer.dropping .box { border-color: var(--moss); border-style: dashed; background: var(--moss-tint); }
   #tray { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 6px 8px 0; }
@@ -462,6 +462,7 @@
           <input id="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/*" multiple hidden>
           <select id="model" aria-label="模型" hidden></select>
           <select id="effort" aria-label="思考强度" hidden></select>
+          <select id="permission" aria-label="权限模式" hidden></select>
           <span id="usage" hidden></span>
           <button id="stop" class="stop round" type="button" aria-label="停止" title="停止" hidden></button>
           <button id="send" class="round" type="button" aria-label="发送" title="发送（回车）"></button>
@@ -484,8 +485,9 @@
         <label class="check" id="notify-sound-row" hidden><input type="checkbox" id="notify-sound"> 通知带提示音</label>
         <p class="hint" id="notify-hint">只在这个标签页不在前台时通知，点通知直接打开那个会话。只对这个浏览器生效，页面要开着。</p>
       </div>
-      <h3>默认模型</h3>
-      <p class="hint">给会话发消息时，如果没在输入框下方单独选过，就用这里的默认值。只保存在这个浏览器里，不影响手机 App。Happy Agent 会话用它自己的模型，不受影响。</p>
+      <h3>默认模型和权限</h3>
+      <p class="hint">给会话发消息时，如果没在输入框下方单独选过，就用这里的默认值。只保存在这个浏览器里，不影响手机 App。Happy Agent 会话用它自己的模型和权限，不受影响。
+        权限不指定时由 Happy CLI 决定（Codex 是「自动」）。Claude 会话进了 YOLO 之后，CLI 不接受直接降回「默认」，要降级请选「自动接受编辑」或「计划模式」。</p>
       <div id="defaults"></div>
       <h3>账号</h3>
       <button id="logout" class="quiet"></button>
