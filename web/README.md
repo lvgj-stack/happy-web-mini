@@ -38,6 +38,10 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 - 回答 agent 的提问：Claude 的 AskUserQuestion（`agentState.requests`，经 `permission` RPC 带 `updatedInput.answers`
   批准）和 Codex / Happy Agent 的表单（`agentState.communications`，经 `communication` RPC）。卡片在输入框上方，
   支持单选、多选、自填和「不回答」；列表里等待回答的会话标「等你回答」
+- 批准工具调用：`agentState.requests` 里除 AskUserQuestion 以外的请求（Codex 的命令 `CodexBash`、改文件 `CodexPatch`、应用 / MCP 工具，
+  Claude 权限模式外的工具和计划模式的 ExitPlanMode）在输入框上方显示审批卡片：要做什么（命令、文件、工具名和参数）、在哪个目录，
+  「完整内容」展开看全部参数。「允许 / 拒绝」经 `permission` RPC 发 `{ id, approved, decision }`；Codex 会话还有「本会话都允许」
+  （`approved_for_session`，同类请求不再问）。列表里标「等你批准」，算进角标和通知。之前网页不显示这类请求，会话会一直卡着
 - 发图片：点「图片」、粘贴或拖进输入框，最多 10 张；超过 2000px 或 3.5MB 的转成 JPEG。图片用会话密钥派生的
   `Happy Blobs` 密钥（secretbox）加密，经 `request-upload` 传到 S3（或自托管服务器 PUT），先发 file 事件再发文字；
   只发图片时自动补一句「请看这张图片。」（CLI 总会附一段文字，Claude 不接受空文字）。聊天里的图片下载后在本地解密显示

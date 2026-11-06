@@ -9,6 +9,7 @@ import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
 import { addCopyButtons, copyText, handleCopyClicks } from './clipboard.js';
 import { openMenu } from './contextmenu.js';
 import { answerCall, canSubmit, declineCall, pendingQuestions, toggle } from './questions.js';
+import { approvalCall, canApproveForSession, describeApproval, pendingApprovals } from './approvals.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
@@ -366,9 +367,12 @@ function groupHead(name, count, collapsed, onToggle, icon = 'computer') {
     return head;
 }
 
+/** 等你批准 when all it waits on are tool approvals, else 等你回答. */
+const waitingLabel = (s) => (waitingSets(s).every((set) => set.via === 'approval') ? '等你批准' : '等你回答');
+
 /** 等你回答 > 正在工作 > 闲置: what the row's icon says. */
 function rowStatus(s) {
-    if (waitingSets(s).length) return '等你回答';
+    if (waitingSets(s).length) return waitingLabel(s);
     if (s.thinking) return '正在工作';
     return isUnread(s) ? '已完成，还没看' : '闲置';
 }
@@ -445,7 +449,7 @@ function row(s, sub) {
     status.children[2].classList.add('st-waiting');
     status.children[3].classList.add('st-unread');
     title.append(status, el('span', 'name', sessionTitle(s)));
-    if (waitingSets(s).length) title.append(el('em', 'asking', '等你回答'));
+    if (waitingSets(s).length) title.append(el('em', 'asking', waitingLabel(s)));
     r.append(title);
     const parts = [].concat(sub ?? []).filter(Boolean);
     if (parts.length) {
@@ -1466,9 +1470,12 @@ function renderTray() {
 // ---------- Questions from the agent ----------
 
 /** Question sets the agent is waiting on, minus ones answered here a moment ago. */
+/** Questions and tool approvals the session waits on, oldest first. */
 function waitingSets(s) {
     if (isArchived(s)) return [];
-    return pendingQuestions(s.agentState).filter((set) => !state.askSent.has(`${s.id}:${set.id}`));
+    return [...pendingQuestions(s.agentState), ...pendingApprovals(s.agentState)]
+        .filter((set) => !state.askSent.has(`${s.id}:${set.id}`))
+        .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 }
 
 function askDrafts(s, set) {
@@ -1490,6 +1497,7 @@ function renderAsk() {
     box.replaceChildren();
     box.hidden = !set;
     if (!set) return;
+    if (set.via === 'approval') { box.append(approvalCard(s, set, sets.length - 1)); return; }
 
     const drafts = askDrafts(s, set);
     const card = el('div', 'ask-card');
@@ -1547,6 +1555,40 @@ function renderAsk() {
 }
 
 /** Call one of the session CLI's RPC methods; params and result are encrypted with the session key. */
+/** A tool waiting for permission: what it wants to do, its full arguments behind a click, and 拒绝 / 允许. */
+function approvalCard(s, set, more) {
+    const d = describeApproval(set, (p) => shortHome(p, s.meta.homeDir));
+    const card = el('div', 'ask-card approval');
+    const head = el('div', 'ask-head');
+    head.append(el('span', null, `需要你批准：${d.title}`));
+    const line = el('p', 'approval-line');
+    line.insertAdjacentHTML('beforeend', iconSvg(d.icon));
+    line.append(el('span', null, d.text));
+    card.append(head, line);
+    if (d.where) card.append(el('p', 'approval-where', `在 ${d.where}`));
+    if (d.detail && d.detail !== d.text) {
+        const details = el('details', 'approval-detail');
+        details.append(el('summary', null, '完整内容'), el('pre', null, d.detail));
+        card.append(details);
+    }
+    const actions = el('div', 'ask-actions');
+    if (more > 0) actions.append(el('span', 'quiet more', `还有 ${more} 个请求`));
+    const deny = el('button', 'quiet', '拒绝');
+    const allow = el('button', 'primary', '允许');
+    const buttons = [deny, allow];
+    if (canApproveForSession(s.meta)) {
+        const session = el('button', 'quiet', '本会话都允许');
+        session.title = '这个会话里同类请求不再询问';
+        session.onclick = () => replyAsk(s, set, approvalCall(set, 'session'), buttons);
+        buttons.splice(1, 0, session);
+    }
+    deny.onclick = () => replyAsk(s, set, approvalCall(set, 'deny'), buttons);
+    allow.onclick = () => replyAsk(s, set, approvalCall(set, 'allow'), buttons);
+    actions.append(...buttons);
+    card.append(actions);
+    return card;
+}
+
 async function sessionRpc(s, method, params) {
     const sock = await getSocket();
     const r = await sock.timeout(15000).emitWithAck('rpc-call', {
