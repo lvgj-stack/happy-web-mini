@@ -198,6 +198,9 @@ async function syncSessions() {
 const isArchived = (s) => s.meta.lifecycleState === 'archived';
 
 function sessionTitle(s) {
+    const kind = kindOf(s);
+    if (kind === 'bot' && s.meta.bot.name) return s.meta.bot.name;
+    if (kind === 'task' && s.meta.task.name) return s.meta.task.name;
     return s.meta.summary?.text || s.meta.name || s.meta.path?.split('/').filter(Boolean).pop() || '未命名会话';
 }
 
@@ -218,35 +221,92 @@ const isOnline = (s) => s.active && !isArchived(s) && Date.now() - s.activeAt < 
 const byName = (a, b) => a.name.localeCompare(b.name, 'zh');
 
 /**
- * Online sessions: computer › project blocks (no project heading) › sessions.
- * Ordered by things that do not change while a session runs (names, creation
- * time), so heartbeats never reshuffle the list.
+ * What a session is, as the official apps read it: a bot (`metadata.bot`,
+ * Happy Agent), a task (`metadata.task`; a session naming both is a bot),
+ * or a chat in a project's checkout.
+ */
+function kindOf(s) {
+    if (s.meta.bot && typeof s.meta.bot === 'object') return 'bot';
+    if (s.meta.task && typeof s.meta.task === 'object') return 'task';
+    return 'chat';
+}
+
+/**
+ * The project and checkout a chat runs in: Happy Agent's own project and
+ * workspace when it reports them, else the directory, with `.dev/worktree/*`
+ * under the repository it belongs to. `workspaceId` is '' for the project's own checkout.
+ */
+function checkout(s) {
+    const project = s.meta.project;
+    if (project?.id) {
+        const ws = s.meta.workspace;
+        return {
+            projectId: 'rig:' + project.id, projectName: project.name || project.id, projectTitle: project.name || project.id,
+            workspaceId: ws?.id || '', workspaceName: ws?.id ? ws.name || ws.id : null,
+        };
+    }
+    const p = place(s);
+    const home = s.meta.homeDir?.replace(/\/+$/, '');
+    const isHome = !p.projectPath || p.projectPath.replace(/\/+$/, '') === home;
+    const shortProject = home && p.projectPath.startsWith(home) ? '~' + p.projectPath.slice(home.length) : p.projectPath;
+    return {
+        projectId: 'path:' + p.projectPath, projectName: isHome ? '~' : p.project || p.projectPath, projectTitle: shortProject || '~',
+        workspaceId: p.worktree ? p.projectPath + WORKTREE_MARKER + p.worktree : '', workspaceName: p.worktree,
+    };
+}
+
+const newestFirst = (a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id);
+/** By a stored order key (the person's own order in the apps), then newest first. */
+const byOrderKey = (key) => (a, b) => {
+    const x = key(a) ?? '￿', y = key(b) ?? '￿';
+    return x < y ? -1 : x > y ? 1 : newestFirst(a, b);
+};
+
+/**
+ * Online sessions: computer › bots, tasks, then chats in a tree of
+ * project › (its own chats, then worktree › chats). Ordered by things that do
+ * not change while a session runs (names, order keys, creation time), so
+ * heartbeats never reshuffle the list. `sessions` is the order rows show in.
  */
 function groupLive(sessions) {
     const machines = new Map();
     for (const s of sessions) {
         const key = machineKey(s);
-        if (!machines.has(key)) machines.set(key, { key, name: s.meta.host || '未知电脑', projects: new Map() });
+        if (!machines.has(key)) machines.set(key, { key, name: s.meta.host || '未知电脑', bots: [], tasks: [], projects: new Map() });
         const m = machines.get(key);
-        const { projectPath, project } = place(s);
-        if (!m.projects.has(projectPath)) m.projects.set(projectPath, { name: project || projectPath, path: projectPath, sessions: [] });
-        m.projects.get(projectPath).sessions.push(s);
+        const kind = kindOf(s);
+        if (kind === 'bot') { m.bots.push(s); continue; }
+        if (kind === 'task') { m.tasks.push(s); continue; }
+        const c = checkout(s);
+        if (!m.projects.has(c.projectId)) m.projects.set(c.projectId, { id: c.projectId, name: c.projectName, title: c.projectTitle, own: [], worktrees: new Map() });
+        const p = m.projects.get(c.projectId);
+        if (!c.workspaceId) { p.own.push(s); continue; }
+        if (!p.worktrees.has(c.workspaceId)) p.worktrees.set(c.workspaceId, { id: c.workspaceId, name: c.workspaceName, sessions: [] });
+        p.worktrees.get(c.workspaceId).sessions.push(s);
     }
     return [...machines.values()]
         .sort((a, b) => byName(a, b) || a.key.localeCompare(b.key))
-        .map((m) => ({
-            ...m,
-            count: [...m.projects.values()].reduce((n, p) => n + p.sessions.length, 0),
-            projects: [...m.projects.values()]
-                .sort((a, b) => byName(a, b) || a.path.localeCompare(b.path))
-                .map((p) => p.sessions.sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id))),
-        }));
+        .map((m) => {
+            const bots = m.bots.sort(byOrderKey((s) => s.meta.bot.orderKey));
+            const tasks = m.tasks.sort(byOrderKey((s) => s.meta.task.orderKey));
+            const projects = [...m.projects.values()]
+                .sort((a, b) => byName(a, b) || a.id.localeCompare(b.id))
+                .map((p) => {
+                    const own = p.own.sort(newestFirst);
+                    const worktrees = [...p.worktrees.values()]
+                        .sort((a, b) => byName(a, b) || a.id.localeCompare(b.id))
+                        .map((w) => ({ ...w, sessions: w.sessions.sort(newestFirst) }));
+                    return { ...p, own, worktrees, sessions: [...own, ...worktrees.flatMap((w) => w.sessions)] };
+                });
+            const all = [...bots, ...tasks, ...projects.flatMap((p) => p.sessions)];
+            return { key: m.key, name: m.name, bots, tasks, projects, sessions: all, count: all.length };
+        });
 }
 
 /** The online sessions in the order the list shows them. */
 function liveSessions() {
     return groupLive([...state.sessions.values()].filter((s) => s.meta.isSideChat !== true && isOnline(s)))
-        .flatMap((m) => m.projects.flat());
+        .flatMap((m) => m.sessions);
 }
 
 const archivedAt = (s) => s.meta.lifecycleStateSince || s.updatedAt || 0;
@@ -396,7 +456,7 @@ function row(s, sub) {
 function renderList() {
     const list = $('list');
     const groups = groupLive([...state.sessions.values()].filter((s) => s.meta.isSideChat !== true && isOnline(s)));
-    const { badge } = desktop.update(groups.flatMap((m) => m.projects.flat()), {
+    const { badge } = desktop.update(groups.flatMap((m) => m.sessions), {
         isUnread, isAsking: (s) => waitingSets(s).length > 0, title: sessionTitle, focused: document.hasFocus(),
     });
     if (badge !== state.badge) { state.badge = badge; applyBrand(); }
@@ -405,7 +465,7 @@ function renderList() {
 
     // Rebuild only when what the list shows changed; heartbeats alone do not.
     const signature = JSON.stringify([[...state.collapsed], groups.map((m) =>
-        [m.key, m.name, m.projects.map((p) => p.map((s) => [s.id, sessionTitle(s), s.meta.path, waitingSets(s).length, isUnread(s)]))]),
+        [m.key, m.name, m.sessions.map((s) => [s.id, sessionTitle(s), kindOf(s), JSON.stringify(checkout(s)), s.meta.task?.folderName, waitingSets(s).length, isUnread(s)])]),
         archived.length, state.archivedOpen, archived.length > archivedRows.length,
         archivedRows.map((s) => [s.id, sessionTitle(s), s.meta.path, s.meta.host, archivedAt(s)])]);
     if (signature === state.listSignature) return;
@@ -417,25 +477,62 @@ function renderList() {
     for (const m of groups) {
         const collapsed = state.collapsed.has(m.key);
         const section = el('section', 'machine' + (collapsed ? ' collapsed' : ''));
-        section.append(groupHead(m.name, m.count, collapsed, () => {
-            if (state.collapsed.has(m.key)) state.collapsed.delete(m.key); else state.collapsed.add(m.key);
-            localStorage.setItem('happy.collapsed', JSON.stringify([...state.collapsed]));
-            renderList();
-        }));
+        section.append(groupHead(m.name, m.count, collapsed, () => toggleCollapsed(m.key)));
         const rows = el('div', 'rows');
-        for (const sessions of m.projects) {
-            const block = el('div', 'project');
-            for (const s of sessions) {
-                const { project, worktree } = place(s);
-                block.append(row(s, worktree ? `${project} / ${worktree}` : project));
-            }
-            rows.append(block);
-        }
+        if (m.bots.length) rows.append(kindBlock('Bot', 'agent', m.bots.map((s) => row(s))));
+        if (m.tasks.length) rows.append(kindBlock('任务', 'todo', m.tasks.map((s) => row(s, taskPath(s)))));
+        if (m.projects.length) rows.append(kindBlock('对话', 'chats', m.projects.map((p) => {
+            const key = `${m.key}\u0000${p.id}`;
+            const worktrees = p.worktrees.map((w) => treeNode(`${key}\u0000${w.id}`, 'worktree', 'branch', w.name, w.id, w.sessions,
+                w.sessions.map((s) => row(s))));
+            return treeNode(key, 'project', 'folder', p.name, p.title, p.sessions, [...p.own.map((s) => row(s)), ...worktrees]);
+        })));
         section.append(rows);
         list.append(section);
     }
     if (archived.length) list.append(archivedSection(archived, archivedRows));
     list.scrollTop = keepScroll;
+}
+
+/** Fold or unfold a computer, project or worktree; remembered in this browser. */
+function toggleCollapsed(key) {
+    if (state.collapsed.has(key)) state.collapsed.delete(key); else state.collapsed.add(key);
+    localStorage.setItem('happy.collapsed', JSON.stringify([...state.collapsed]));
+    renderList();
+}
+
+/** Happy Desktop's place for a task: its folder under ~/Tasks. */
+const taskPath = (s) => (s.meta.task.folderName ? `~/Tasks/${s.meta.task.folderName}` : '~/Tasks');
+
+/** One kind of session inside a computer (Bot / 任务 / 对话), under a small label. */
+function kindBlock(label, icon, children) {
+    const block = el('div', 'kind');
+    const head = el('div', 'kind-head');
+    head.insertAdjacentHTML('beforeend', iconSvg(icon, 13));
+    head.append(el('span', null, label));
+    block.append(head, ...children);
+    return block;
+}
+
+/**
+ * A foldable project or worktree in the chat tree. Open by default; folded,
+ * its head carries a dot when a chat inside waits for an answer or is unread.
+ */
+function treeNode(key, kind, icon, name, title, sessions, children) {
+    const collapsed = state.collapsed.has(key);
+    const node = el('div', `tree ${kind}` + (collapsed ? ' collapsed' : ''));
+    const head = el('button', 'tree-head');
+    head.setAttribute('aria-expanded', String(!collapsed));
+    if (title) head.title = title;
+    if (sessions.some((s) => waitingSets(s).length)) head.classList.add('asking');
+    else if (sessions.some(isUnread)) head.classList.add('unread');
+    head.insertAdjacentHTML('beforeend', iconSvg(icon, 14));
+    head.append(el('span', 'name', name), el('span', 'count', String(sessions.length)), el('span', 'mark'), el('span', 'chev'));
+    head.onclick = () => toggleCollapsed(key);
+    const rows = el('div', 'rows');
+    rows.append(...children);
+    node.append(head, rows);
+    return node;
 }
 
 /** The 已归档 group under the computers: newest first, a page at a time. */
@@ -451,7 +548,9 @@ function archivedSection(archived, shown) {
     const rows = el('div', 'rows');
     for (const s of shown) {
         const { project, worktree } = place(s);
-        rows.append(row(s, [s.meta.host, worktree ? `${project} / ${worktree}` : project, shortDate(archivedAt(s))]));
+        const kind = kindOf(s);
+        const where = kind === 'bot' ? 'Bot' : kind === 'task' ? taskPath(s) : worktree ? `${project} / ${worktree}` : project;
+        rows.append(row(s, [s.meta.host, where, shortDate(archivedAt(s))]));
     }
     if (archived.length > shown.length) {
         const more = el('button', 'more', `再显示 ${Math.min(ARCHIVED_PAGE, archived.length - shown.length)} 个`);

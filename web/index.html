@@ -114,11 +114,31 @@
   .group-head .name { min-width: 0; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .group-head .count { flex: none; color: var(--muted); font-size: 12px; line-height: 18px; min-width: 20px; padding: 0 6px; text-align: center; background: var(--sheet); border-radius: 9px; }
   .group-head .chev { flex: none; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
-  .machine .rows { padding: 4px; }
-  .collapsed .chev { transform: rotate(-45deg); }
-  .collapsed .rows { display: none; }
+  .machine > .rows { padding: 4px; }
+  .collapsed > .group-head .chev { transform: rotate(-45deg); }
+  .collapsed > .rows { display: none; }
 
-  .project + .project { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule); }
+  /* Inside a computer: Bot / 任务 / 对话, each under a small label */
+  .kind + .kind { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule); }
+  .kind-head { display: flex; align-items: center; gap: 6px; padding: 6px 12px 3px; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .kind-head svg { flex: none; width: 13px; height: 13px; }
+
+  /* 对话: project › worktree › chats, a tree line down the left */
+  .tree-head { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; padding: 5px 12px; border-radius: 6px; font-size: 13px; }
+  .tree-head:hover { background: rgba(38, 42, 39, .04); }
+  .tree-head svg { flex: none; width: 14px; height: 14px; color: var(--muted); }
+  .tree.project > .tree-head svg { color: var(--moss); }
+  .tree-head .name { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree.worktree > .tree-head .name { font-weight: 500; }
+  .tree-head .count { flex: none; color: var(--muted); font-size: 12px; }
+  .tree-head .mark { display: none; flex: none; width: 6px; height: 6px; border-radius: 50%; }
+  .tree.collapsed > .tree-head.unread .mark { display: block; background: var(--moss); }
+  .tree.collapsed > .tree-head.asking .mark { display: block; background: #B7791F; }
+  .tree-head .chev { flex: none; margin-left: auto; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+  .tree.collapsed > .tree-head .chev { transform: rotate(-45deg); }
+  .tree > .rows { margin-left: 18px; padding-left: 4px; border-left: 1px solid var(--rule); }
+  .tree > .rows > .row { padding-left: 8px; }
+  .tree > .rows > .tree > .tree-head { padding-left: 8px; }
   .row { display: block; width: 100%; text-align: left; padding: 6px 12px; border-radius: 6px; }
   .row:hover { background: rgba(38, 42, 39, .04); }
   .row.selected { background: var(--moss-tint); }
@@ -148,6 +168,7 @@
   .machine.archived .row.selected .name { color: var(--ink); }
   .machine.archived .more { display: block; width: 100%; text-align: left; padding: 6px 12px 6px 33px; color: var(--moss); font-size: 13px; border-radius: 6px; }
   .machine.archived .more:hover { background: rgba(38, 42, 39, .04); }
+
 
   /* Drag handle between the sidebar and the chat */
   #resizer { flex: none; width: 8px; margin: 0 -4px; position: relative; z-index: 2; cursor: col-resize; touch-action: none; }

@@ -29,6 +29,9 @@ import PanelLeftClose from './node_modules/lucide-static/dist/esm/icons/panel-le
 import PanelLeftOpen from './node_modules/lucide-static/dist/esm/icons/panel-left-open.mjs';
 import Copy from './node_modules/lucide-static/dist/esm/icons/copy.mjs';
 import Check from './node_modules/lucide-static/dist/esm/icons/check.mjs';
+import Folder from './node_modules/lucide-static/dist/esm/icons/folder.mjs';
+import GitBranch from './node_modules/lucide-static/dist/esm/icons/git-branch.mjs';
+import MessagesSquare from './node_modules/lucide-static/dist/esm/icons/messages-square.mjs';
 
 const ICONS = {
     terminal: SquareTerminal,
@@ -58,6 +61,9 @@ const ICONS = {
     sideOpen: PanelLeftOpen,
     copy: Copy,
     copied: Check,
+    folder: Folder,
+    branch: GitBranch,
+    chats: MessagesSquare,
 };
 
 /** Filled icons: the glyph is a solid shape, not an outline. */
