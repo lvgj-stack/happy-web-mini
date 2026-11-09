@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-    DEFAULT_FADE, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle,
+    DEFAULT_FADE, readWallpaper, sideFade, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle,
 } from '../wallpaper.js';
 
 const memory = () => {
@@ -26,10 +26,14 @@ test('a color, then back to the default', () => {
     const s = memory();
     setWallpaperColor(s, '#e8f1ea');
     assert.deepEqual(readWallpaper(s), { kind: 'color', color: '#E8F1EA', fade: DEFAULT_FADE, image: '' });
-    assert.equal(wallpaperStyle(readWallpaper(s)).backgroundColor, '#E8F1EA');
+    const tinted = wallpaperStyle(readWallpaper(s));
+    assert.equal(tinted.main.backgroundColor, '#E8F1EA');
+    assert.equal(tinted.side.backgroundColor, '', 'a color tints the chat area alone');
+    assert.equal(tinted.app.backgroundImage, '');
     setWallpaperColor(s, '');
     assert.equal(readWallpaper(s).kind, 'default');
-    assert.deepEqual(wallpaperStyle(readWallpaper(s)), { backgroundColor: '', backgroundImage: '', backgroundSize: '', backgroundPosition: '' });
+    const none = { backgroundColor: '', backgroundImage: '', backgroundSize: '', backgroundPosition: '' };
+    assert.deepEqual(wallpaperStyle(readWallpaper(s)), { app: none, side: none, main: none });
 });
 
 test('a picture under a veil; it stays kept while a color is picked', () => {
@@ -38,7 +42,12 @@ test('a picture under a veil; it stays kept while a color is picked', () => {
     setWallpaperFade(s, 0.3);
     let w = readWallpaper(s);
     assert.deepEqual(w, { kind: 'image', color: '', fade: 0.3, image: IMG });
-    assert.equal(wallpaperStyle(w).backgroundImage, `linear-gradient(rgba(252, 252, 250, 0.3), rgba(252, 252, 250, 0.3)), url("${IMG}")`);
+    const style = wallpaperStyle(w);
+    assert.equal(style.app.backgroundImage, `url("${IMG}")`, 'one picture spans the window');
+    assert.equal(style.main.backgroundColor, 'rgba(252, 252, 250, 0.3)');
+    assert.equal(style.side.backgroundColor, 'rgba(242, 243, 239, 0.45)', 'the sidebar a little denser');
+    assert.equal(style.main.backgroundImage, '');
+    assert.equal(sideFade(0.9), 0.95);
     setWallpaperColor(s, '#F6F1E6');
     w = readWallpaper(s);
     assert.equal(w.kind, 'color');

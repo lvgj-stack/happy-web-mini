@@ -1,4 +1,4 @@
-// The chat area's background: a preset or custom color, or a picture of your own
+// The window's background: a preset or custom color, or a picture of your own
 // under a veil of the page color so the text stays readable. Kept per browser.
 
 const KEY = 'happy.wallpaper';
@@ -14,6 +14,7 @@ export const PRESETS = [
 ];
 export const DEFAULT_FADE = 0.6;
 const VEIL = '252, 252, 250'; // --sheet
+const SIDE_VEIL = '242, 243, 239'; // --paper
 
 const isColor = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
 const isImage = (d) => typeof d === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(d);
@@ -57,20 +58,29 @@ export function removeWallpaperImage(storage) {
     if (w.kind === 'image') storage.setItem(KEY, JSON.stringify({ kind: 'default', fade: w.fade }));
 }
 
-/** Inline styles for the chat area; empty strings put the stylesheet's look back. */
+const NONE = { backgroundColor: '', backgroundImage: '', backgroundSize: '', backgroundPosition: '' };
+const veil = (rgb, alpha) => ({ ...NONE, backgroundColor: `rgba(${rgb}, ${alpha})` });
+
+/**
+ * Inline styles for the window (#app), the sidebar and the chat area; empty
+ * strings put the stylesheet's look back. A color tints the chat area alone;
+ * a picture spans the whole window, under the page color in the chat area and
+ * a denser sidebar color, so the two still read apart.
+ */
 export function wallpaperStyle(w) {
-    if (w.kind === 'color') return { backgroundColor: w.color, backgroundImage: '', backgroundSize: '', backgroundPosition: '' };
+    if (w.kind === 'color') return { app: NONE, side: NONE, main: { ...NONE, backgroundColor: w.color } };
     if (w.kind === 'image') {
-        const veil = `rgba(${VEIL}, ${w.fade})`;
         return {
-            backgroundColor: '',
-            backgroundImage: `linear-gradient(${veil}, ${veil}), url("${w.image}")`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            app: { ...NONE, backgroundImage: `url("${w.image}")`, backgroundSize: 'cover', backgroundPosition: 'center' },
+            side: veil(SIDE_VEIL, sideFade(w.fade)),
+            main: veil(VEIL, w.fade),
         };
     }
-    return { backgroundColor: '', backgroundImage: '', backgroundSize: '', backgroundPosition: '' };
+    return { app: NONE, side: NONE, main: NONE };
 }
+
+/** The sidebar's veil: a little denser than the chat area's. */
+export const sideFade = (fade) => Math.round(Math.min(0.95, fade + 0.15) * 100) / 100;
 
 const MAX_EDGE = 2560;
 const MAX_CHARS = 1.5 * 1024 * 1024; // the data URL; localStorage holds about 5 million characters in all

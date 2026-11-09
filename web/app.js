@@ -1917,9 +1917,14 @@ function applyBrand() {
     document.title = state.badge ? `(${state.badge}) ${name}` : name;
 }
 
-/** The chat area's background, as picked in settings. */
+/** The window's background, as picked in settings: a color tints the chat area, a picture spans both columns. */
 function applyWallpaper() {
-    Object.assign(document.querySelector('main').style, wallpaperStyle(readWallpaper(localStorage)));
+    const w = readWallpaper(localStorage);
+    const style = wallpaperStyle(w);
+    Object.assign($('app').style, style.app);
+    $('app').classList.toggle('wallpapered', w.kind === 'image');
+    Object.assign(document.querySelector('aside').style, style.side);
+    Object.assign(document.querySelector('main').style, style.main);
 }
 
 /** 背景 in settings: presets, a color of your own, and a picture. */
