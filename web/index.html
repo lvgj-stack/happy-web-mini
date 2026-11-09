@@ -263,6 +263,20 @@
   .msg.thinking { color: var(--muted); font-size: 15px; margin: 8px 0; }
   .msg.thinking-now { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; margin: 16px 0; }
   .placeholder .spin { margin-right: 8px; }
+  /* Background tasks: the line opens to each one, which jumps to where it started */
+  .msg.thinking-now.background { display: block; white-space: normal; }
+  .bg-head { gap: 8px; color: var(--muted); font-size: 15px; }
+  .bg-head:hover { color: var(--ink); }
+  .bg-head .chev { width: 6px; height: 6px; margin-left: 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translate(-1px, -1px); transition: transform .15s; }
+  .background.open .bg-head .chev { transform: rotate(-135deg) translate(-1px, -1px); }
+  .bg-list { list-style: none; margin: 6px 0 0; padding: 0 0 0 20px; }
+  .bg-task { display: flex; gap: 10px; width: 100%; text-align: left; color: var(--ink); font-size: 15px; padding: 3px 0; }
+  .bg-task:disabled { color: var(--muted); opacity: 1; }
+  .bg-task:not(:disabled):hover .bg-label { text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+  .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bg-time { flex: none; color: var(--moss); font-size: 12px; }
+  .tool-row.flash { animation: flash 1.6s ease-out; border-radius: 6px; }
+  @keyframes flash { from { background: var(--moss-tint); } to { background: transparent; } }
   @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 
   /* Markdown from the agent: github-markdown-css + highlight.js (github theme),

@@ -32,8 +32,8 @@ export function backgroundTracker() {
             maxSeq = Math.max(maxSeq, seq);
             if (relevant(view)) events.set(seq, view);
         },
-        /** What still runs, oldest first. */
-        labels() {
+        /** What still runs, oldest first: { id: the launch call, label, since: when it (re)started, ms or null }. */
+        tasks() {
             const state = replayState();
             let past = false; // replayed beyond the moment the process ended
             for (const seq of [...events.keys()].sort((x, y) => x - y)) {
@@ -41,8 +41,10 @@ export function backgroundTracker() {
                 state.see(events.get(seq));
             }
             if (!past) state.running.clear();
-            return [...state.running.values()];
+            return [...state.running.entries()].map(([id, task]) => ({ id, ...task }));
         },
+        /** What still runs, oldest first, as shown. */
+        labels() { return this.tasks().map((t) => t.label); },
         /** The process is gone: nothing seen so far runs any more. */
         clear() { clearedAt = maxSeq; },
     };
@@ -53,10 +55,13 @@ function relevant(view) {
     return view?.kind === 'tool' && !!view.call && !!view.args && (view.args.run_in_background === true || view.name === SEND);
 }
 
+/** When a message was sent: the server's time, else the CLI's. */
+const when = (view) => view.at || view.time || null;
+
 function replayState() {
     const agents = new Map();  // launch call -> { name, label }
     const aliases = new Map(); // call / name / task id -> launch call
-    const running = new Map(); // launch call -> label shown
+    const running = new Map(); // launch call -> { label shown, since }
 
     const resolve = (ref) => (ref == null ? undefined : aliases.get(ref) ?? aliases.get(String(ref).toLowerCase()));
 
@@ -68,7 +73,7 @@ function replayState() {
         aliases.set(view.call, view.call);
         if (name) aliases.set(name.toLowerCase(), view.call);
         running.delete(view.call); // newest last
-        running.set(view.call, label);
+        running.set(view.call, { label, since: when(view) });
     }
 
     function resume(view) {
@@ -78,7 +83,8 @@ function replayState() {
         const summary = str(view.args.summary);
         aliases.set(view.call, id);
         running.delete(id);
-        running.set(id, summary ? `${agent.name ?? agent.label} · ${summary}` : agent.name ?? agent.label);
+        const label = summary ? `${agent.name ?? agent.label} · ${summary}` : agent.name ?? agent.label;
+        running.set(id, { label, since: when(view) });
     }
 
     function stop({ toolUseId, taskId }) {

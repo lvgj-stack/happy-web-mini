@@ -1216,22 +1216,92 @@ function renderThinking() {
     const on = !!(thread && (s.thinking || waiting) && !isArchived(s) && !turnShowsIt);
     renderStop(s, thread, turnShowsIt || on);
     // Idle, but a subagent or command it started in the background still runs.
-    const background = thread && !on && !turnShowsIt && s.active && !isArchived(s)
-        ? backgroundText(thread.background?.labels() ?? []) : '';
+    const tasks = thread && !on && !turnShowsIt && s.active && !isArchived(s) ? thread.background?.tasks() ?? [] : [];
     const node = state.thinkingNode;
-    if (!on && !background) { node?.remove(); return; }
-    const text = background || (s.thinking ? '正在思考' : '等待回复');
-    if (node && node.parentElement === thread.el) {
-        node.querySelector('.label').textContent = text;
-        return;
-    }
-    const fresh = node ?? waitingNode('msg thinking-now', text);
-    fresh.querySelector('.label').textContent = text;
-    fresh.id = 'thinking';
-    state.thinkingNode = fresh;
-    thread.el.append(fresh);
+    if (!on && !tasks.length) { node?.remove(); return; }
+    const fresh = !node || node.parentElement !== thread.el;
+    const next = node ?? el('div', 'msg thinking-now');
+    next.id = 'thinking';
+    if (tasks.length) fillBackground(next, thread, tasks);
+    else fillWaiting(next, s.thinking ? '正在思考' : '等待回复');
+    state.thinkingNode = next;
+    if (!fresh) return;
+    thread.el.append(next);
     const box = $('scroll');
     box.scrollTop = box.scrollHeight;
+}
+
+function fillWaiting(node, text) {
+    if (node.classList.contains('background') || !node.querySelector('.label')) {
+        node.className = 'msg thinking-now';
+        node.replaceChildren(el('span', 'spin'), el('span', 'label'));
+    }
+    node.querySelector('.label').textContent = text;
+}
+
+/** "后台运行中：A 等 3 个", opening to every task; a task jumps to the call that started it. */
+function fillBackground(node, thread, tasks) {
+    const open = !!thread.backgroundOpen;
+    node.className = `msg thinking-now background${open ? ' open' : ''}`;
+    const head = el('button', 'bg-head');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', String(open));
+    head.append(el('span', 'spin'), el('span', 'label', backgroundText(tasks.map((t) => t.label))), el('span', 'chev'));
+    head.onclick = () => {
+        thread.backgroundOpen = !thread.backgroundOpen;
+        renderThinking();
+        if (thread.backgroundOpen) node.scrollIntoView({ block: 'nearest' });
+    };
+    const list = el('ul', 'bg-list');
+    list.hidden = !open;
+    for (const task of tasks.slice().reverse()) { // newest first, as the line names it
+        const item = el('li');
+        const go = el('button', 'bg-task');
+        go.type = 'button';
+        go.append(el('span', 'bg-label', task.label), el('span', 'bg-time'));
+        if (task.since) go.querySelector('.bg-time').dataset.since = String(task.since);
+        const row = launchRow(thread, task.id);
+        if (row) {
+            go.title = '跳到启动它的地方';
+            go.onclick = () => revealRow(row);
+        } else {
+            go.disabled = true;
+            go.title = '启动它的消息还没载入';
+        }
+        item.append(go);
+        list.append(item);
+    }
+    node.replaceChildren(head, list);
+    tickBackground(node);
+}
+
+/** The tool row of the call that started a background task, if loaded. */
+function launchRow(thread, call) {
+    for (const block of thread.turns.values()) {
+        const row = block.tools.get(call);
+        if (row) return { block, row };
+    }
+    return null;
+}
+
+/** Unfold its turn, open its details, and bring it into view for a moment. */
+function revealRow({ block, row }) {
+    block.userToggled = true;
+    setCollapsed(block, false);
+    const detail = row.querySelector('.tool-detail');
+    if (detail?.hidden) row.querySelector('.tool-line').click();
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row.classList.remove('flash');
+    void row.offsetWidth; // restart the animation
+    row.classList.add('flash');
+}
+
+/** "已运行 3分2秒" on each listed task. */
+function tickBackground(node = state.thinkingNode) {
+    if (!node?.classList.contains('open')) return;
+    for (const time of node.querySelectorAll('.bg-time[data-since]')) {
+        time.textContent = `已运行 ${formatDuration(Date.now() - Number(time.dataset.since))}`;
+    }
 }
 
 // ---------- Stop ----------
@@ -2611,6 +2681,7 @@ setInterval(renderUsage, 60000);
 setInterval(() => {
     const thread = state.current && state.threads.get(state.current.id);
     if (thread?.newest?.el.classList.contains('running')) tickTurn(thread.newest, true);
+    if (state.thinkingNode?.parentElement === thread?.el) tickBackground();
     if (thread?.awaiting && !awaiting(thread)) { thread.awaiting = null; renderThinking(); }
 }, 1000);
 

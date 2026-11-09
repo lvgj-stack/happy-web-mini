@@ -131,3 +131,19 @@ test('the status line names the newest and counts the rest', () => {
     assert.equal(backgroundText(['A']), '后台运行中：A');
     assert.equal(backgroundText(['A', 'B', 'C']), '后台运行中：C 等 3 个');
 });
+
+test('tasks name the launch call and when each (re)started', () => {
+    const t = backgroundTracker();
+    t.see({ ...agent('toolu_dev', { name: 'Dev', description: '实现' }), at: 1000, time: 900 }, 1);
+    t.see({ kind: 'tool', call: 'toolu_sh', name: 'Bash', args: { command: 'npm test', run_in_background: true }, time: 1500 }, 2);
+    assert.deepEqual(t.tasks(), [
+        { id: 'toolu_dev', label: '实现', since: 1000 },
+        { id: 'toolu_sh', label: 'npm test', since: 1500 },
+    ]);
+    t.see(stops(note('toolu_dev', 'adev')), 3);
+    t.see({ ...send('toolu_s', { to: 'Dev', summary: '再补', message: '…' }), at: 5000 }, 4);
+    assert.deepEqual(t.tasks(), [
+        { id: 'toolu_sh', label: 'npm test', since: 1500 },
+        { id: 'toolu_dev', label: 'Dev · 再补', since: 5000 },
+    ]);
+});
