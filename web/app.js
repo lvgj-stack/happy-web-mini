@@ -895,7 +895,7 @@ function toView(raw) {
                 if (env.role === 'user') return userView(ev.text);
                 return { kind: ev.thinking ? 'thinking' : 'agent', text: ev.text, ...at };
             case 'service': return { kind: 'meta', text: ev.text, ...at };
-            case 'tool-call-start': return { kind: 'tool', call: ev.call, name: ev.name, title: ev.title, args: ev.args, text: ev.title || ev.name, ...at };
+            case 'tool-call-start': return { kind: 'tool', call: ev.call, name: ev.name, title: ev.title, args: ev.args, text: ev.title || ev.name, subagent: env.subagent ?? null, ...at };
             case 'tool-call-end': return at.turn ? { kind: 'tool-end', call: ev.call, ...at } : null;
             case 'turn-start': return at.turn ? { kind: 'turn-start', ...at } : null;
             case 'turn-end': return at.turn ? { kind: 'turn-end', status: ev.status, ...at } : null;

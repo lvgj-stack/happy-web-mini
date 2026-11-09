@@ -41,6 +41,16 @@ test('foreground calls and other messages start nothing', () => {
     assert.deepEqual(t.labels(), []);
 });
 
+test('what a subagent starts in the background is left out: its notification goes to the subagent, not here', () => {
+    const t = inOrder();
+    t.see(agent('toolu_dev', { description: 'Dev A' }));
+    t.see({ kind: 'tool', call: 'toolu_sub', name: 'Bash', subagent: 'sa1', args: { command: 'make hz', run_in_background: true } });
+    t.see({ kind: 'tool', call: 'toolu_sub2', name: 'SendMessage', subagent: 'sa1', args: { to: 'Dev A', message: '…' } });
+    assert.deepEqual(t.labels(), ['Dev A']);
+    t.see(stops(note('toolu_dev', 'adev')));
+    assert.deepEqual(t.labels(), []);
+});
+
 test('SendMessage to a stopped agent, by its agentId, runs it again', () => {
     const t = inOrder();
     t.see(agent('toolu_dev', { description: 'Dev：实现字段' }));

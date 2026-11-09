@@ -4,7 +4,7 @@
 // system messages it drops, and the tool call ends at once ("launched"). What
 // does reach us:
 //   - the launch: a tool call with `run_in_background: true` (an Agent may
-//     also carry a `name` to be messaged by);
+//     also carry a `name` to be messaged by) by the main agent, not a subagent;
 //   - a resume: SendMessage({ to: <name or agentId>, summary?, message }) to an
 //     agent that had stopped;
 //   - each stop: a user message wrapped in <task-notification> with the
@@ -52,8 +52,16 @@ export function backgroundTracker() {
 
 function relevant(view) {
     if (view?.stops?.length) return true;
-    return view?.kind === 'tool' && !!view.call && !!view.args && (view.args.run_in_background === true || view.name === SEND);
+    return isTaskCall(view);
 }
+
+/**
+ * A launch or a resume by the main agent. A subagent's own background tasks
+ * are left out: their <task-notification> goes to that subagent (forwarded as
+ * its text, or lost once it has ended), so we would never see them stop.
+ */
+const isTaskCall = (view) => view?.kind === 'tool' && !!view.call && !!view.args && !view.subagent
+    && (view.args.run_in_background === true || view.name === SEND);
 
 /** When a message was sent: the server's time, else the CLI's. */
 const when = (view) => view.at || view.time || null;
@@ -97,7 +105,7 @@ function replayState() {
     return {
         running,
         see(view) {
-            if (view?.kind === 'tool' && view.call && view.args) {
+            if (isTaskCall(view)) {
                 if (view.args.run_in_background === true) launch(view);
                 else if (view.name === SEND) resume(view);
             }

@@ -39,7 +39,7 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
   `model` / `model_provider` / `model_reasoning_effort` 来。模型在 Codex 建 thread 时就定了，要在会话的第一条消息（或 `/clear` 之后）就是这个选项才生效
 - 工具调用按轮次折叠：一轮里的中间文字和工具调用收在「已工作 7分2秒」下面，最后的回答留在外面；进行中显示
   「正在工作 12秒」实时走秒，正在跑的工具也显示已用时间，结束后自动折叠。工具行是图标加命令/路径/搜索词，点开看完整参数
-- 后台任务：一轮结束后还在跑的后台 subagent / 命令（`run_in_background`，或用 SendMessage 唤醒的已有 agent）在对话末尾显示「后台运行中：A 等 2 个」，收到 `<task-notification>` 才算结束。点开列出每一个和已运行时长，点某一个跳到启动它的工具调用（展开所在轮次和参数，能看到给它的 prompt）。CLI 不转发后台任务的中间过程，所以只看得到它在跑、跑了多久，看不到它在做什么。这时列表里那一行也照样转圈（悬停提示「后台运行中」）；只认在本浏览器打开过的会话，没打开过的不拉历史、不知道有没有后台任务
+- 后台任务：一轮结束后还在跑的后台 subagent / 命令（`run_in_background`，或用 SendMessage 唤醒的已有 agent）在对话末尾显示「后台运行中：A 等 2 个」，收到 `<task-notification>` 才算结束。子 agent 自己在后台启动的命令不算：它的通知只发给那个子 agent，这边收不到，算上就会一直显示在跑。点开列出每一个和已运行时长，点某一个跳到启动它的工具调用（展开所在轮次和参数，能看到给它的 prompt）。CLI 不转发后台任务的中间过程，所以只看得到它在跑、跑了多久，看不到它在做什么。这时列表里那一行也照样转圈（悬停提示「后台运行中」）；只认在本浏览器打开过的会话，没打开过的不拉历史、不知道有没有后台任务
 - 回答 agent 的提问：Claude 的 AskUserQuestion（`agentState.requests`，经 `permission` RPC 带 `updatedInput.answers`
   批准）和 Codex / Happy Agent 的表单（`agentState.communications`，经 `communication` RPC）。卡片在输入框上方，
   支持单选、多选、自填和「不回答」；列表里等待回答的会话标「等你回答」
