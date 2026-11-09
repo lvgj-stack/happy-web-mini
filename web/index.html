@@ -238,7 +238,7 @@
   #notice { font-size: 14px; padding-bottom: 8px; }
   /* Links the chat mentions: docked in the right margin when the main area is wide enough */
   main { container-type: inline-size; }
-  #links { display: none; font-size: 13px; line-height: 1.5; }
+  #links { display: none; font-size: 13px; line-height: 1.5; -webkit-app-region: no-drag; }
   #links-toggle { margin-top: 6px; flex: none; }
   /* narrow, or put away: a popover under the toggle (placed by script) */
   #links.open:not([hidden]) { display: block; position: absolute; z-index: 20; width: min(320px, calc(100% - 16px)); max-height: 60vh; overflow-y: auto; padding: 8px 14px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(38, 42, 39, .12); }

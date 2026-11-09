@@ -7,12 +7,22 @@ import { Marked } from './node_modules/marked/lib/marked.esm.js';
 const marked = new Marked({ gfm: true });
 
 // GFM autolinks stop at whitespace, so a bare URL swallows the Chinese
-// punctuation (and the words) right after it.
-const CJK_PUNCT = /[。，、；：！？（）【】「」『』《》〈〉…—“”‘’]/;
+// (punctuation or words) right after it; a pasted URL has its own encoded.
+const CJK = /[\u3000-\u303f\u3400-\u9fff\uff00-\uffef…—“”‘’]/;
 
-/** Without its #fragment and trailing slash: one entry per page. */
+/** GFM's trailing rule, again after the cut: no end punctuation, no unmatched ")". */
+function trimEnd(url) {
+    for (;;) {
+        const last = url.at(-1);
+        if ('?!.,:*_~\'"'.includes(last)) url = url.slice(0, -1);
+        else if (last === ')' && url.split('(').length < url.split(')').length) url = url.slice(0, -1);
+        else return url;
+    }
+}
+
+/** Without its #fragment (a #/ or #! route is kept: it is the page) and trailing slash: one entry per page. */
 export function normalizeUrl(url) {
-    return url.replace(/#.*$/, '').replace(/\/+$/, '');
+    return url.replace(/#(?![/!]).*$/, '').replace(/\/+$/, '');
 }
 
 /** Links in markdown, in order: `text` is the link text when it says more than the URL. Code is skipped. */
@@ -24,8 +34,8 @@ export function extractLinks(markdown) {
         const bare = !token.raw.startsWith('[') && !token.raw.startsWith('<');
         let url = token.href;
         if (bare) {
-            const cut = url.search(CJK_PUNCT);
-            if (cut >= 0) url = url.slice(0, cut);
+            const cut = url.search(CJK);
+            if (cut >= 0) url = trimEnd(url.slice(0, cut));
         }
         if (!/^https?:\/\/[^/]/i.test(url)) return;
         const text = bare ? null : token.text?.trim();

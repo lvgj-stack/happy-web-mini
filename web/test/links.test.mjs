@@ -18,6 +18,18 @@ test('extract: code is skipped, only http(s), trailing punctuation dropped', () 
     assert.deepEqual(extractLinks('列表\n- 链接：https://a.com/p，然后'), [{ url: 'https://a.com/p', text: null }]);
 });
 
+test('extract: a closing paren before Chinese punctuation or text is not part of the URL', () => {
+    assert.deepEqual(extractLinks('MR 在这 (https://github.com/a/b/pull/3)。'), [{ url: 'https://github.com/a/b/pull/3', text: null }]);
+    assert.deepEqual(extractLinks('文档(https://x.feishu.cn/wiki/Q1)里'), [{ url: 'https://x.feishu.cn/wiki/Q1', text: null }]);
+    assert.deepEqual(extractLinks('见 https://a.com/x.，然后'), [{ url: 'https://a.com/x', text: null }]);
+    assert.deepEqual(extractLinks('https://en.wikipedia.org/wiki/A_(b)。'), [{ url: 'https://en.wikipedia.org/wiki/A_(b)', text: null }], 'balanced parens stay');
+});
+
+test('normalize: a hash route is part of the page', () => {
+    assert.equal(normalizeUrl('https://tool.example.com/#/task/123'), 'https://tool.example.com/#/task/123');
+    assert.equal(normalizeUrl('https://tool.example.com/#!/task/1'), 'https://tool.example.com/#!/task/1');
+});
+
 test('normalize: fragment and trailing slash', () => {
     assert.equal(normalizeUrl('https://a.com/x/#h'), 'https://a.com/x');
     assert.equal(normalizeUrl('https://a.com/x?q=1#h'), 'https://a.com/x?q=1');

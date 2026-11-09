@@ -158,6 +158,8 @@ async function loginWithQR() {
 function logout() {
     localStorage.removeItem('happy.secret');
     localStorage.removeItem('happy.token');
+    // Decrypted links stay with the account, not on a shared machine.
+    for (const key of Object.keys(localStorage)) if (key.startsWith('happy.links.')) localStorage.removeItem(key);
     clearInterval(state.messageTimer);
     clearInterval(state.listTimer);
     socket?.disconnect();
@@ -670,22 +672,24 @@ function startLinkScan(s, thread) {
     if (thread.hasOlder && thread.oldestSeq === LATEST) return; // the first page never came: try on the next open
     thread.linkScan = 'running';
     const rerender = () => { if (state.current === s) renderLinks(); };
+    const alive = () => state.threads.get(s.id) === thread; // gone on logout
     scanHistory({
         tracker: thread.links,
         loaded: { from: thread.oldestSeq, to: thread.afterSeq, hasOlder: thread.hasOlder },
-        cache: thread.linkCache,
+        cache: thread.linkCover ?? thread.linkCache, // a retry joins what the last run saved
         fetchPage: async (before) => {
             const page = await api('GET', `/v3/sessions/${encodeURIComponent(s.id)}/messages?before_seq=${before}&limit=${PAGE}`);
             const decoded = await decodePage(s, page.messages.slice().reverse()); // DESC -> ASC
             return { rows: decoded.map(({ m, view }) => ({ seq: m.seq, view })), hasMore: page.hasMore };
         },
         save: (cover) => {
+            if (!alive()) return;
             thread.linkCache = null; // joined: the saved range is ours now
             thread.linkCover = { ...cover, to: Math.max(cover.to, thread.linkCover?.to ?? 0, thread.afterSeq) };
             saveLinks(thread);
             rerender();
         },
-        alive: () => true, // switching away does not stop it
+        alive, // switching away does not stop it
     }).then(({ complete }) => {
         thread.linkScan = complete ? 'done' : null;
     }, (e) => {
@@ -828,9 +832,10 @@ function openLinksPopover() {
     const box = $('links');
     const t = $('links-toggle').getBoundingClientRect();
     const m = document.querySelector('main').getBoundingClientRect();
-    box.style.top = `${t.bottom - m.top + 6}px`;
-    box.style.right = `${Math.max(8, m.right - t.right)}px`;
     box.classList.add('open');
+    box.style.top = `${t.bottom - m.top + 6}px`;
+    // Under the toggle, but never past either edge.
+    box.style.right = `${Math.max(8, Math.min(m.right - t.right, m.width - box.offsetWidth - 8))}px`;
 }
 
 function closeLinksPopover() {
@@ -850,7 +855,7 @@ document.addEventListener('pointerdown', (e) => {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && $('links').classList.contains('open')) closeLinksPopover();
 });
-window.addEventListener('resize', closeLinksPopover);
+new ResizeObserver(closeLinksPopover).observe(document.querySelector('main')); // the window, or the sidebar folding
 document.body.classList.toggle('links-hidden', localStorage.getItem('happy.linksHidden') === '1');
 
 /** Fold or unfold a group of links; remembered with the sidebar's folds. */
