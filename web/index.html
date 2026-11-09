@@ -330,6 +330,10 @@
   .bg-drop-all:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
   .tool-row.flash { animation: flash 1.6s ease-out; border-radius: 6px; }
   @keyframes flash { from { background: var(--moss-tint); } to { background: transparent; } }
+  /* a message a link went back to: a ring, so a bubble keeps its own background */
+  .msg.flash { animation: ring 1.6s ease-out; border-radius: 6px; }
+  .msg.user.flash { border-radius: 10px; }
+  @keyframes ring { from { box-shadow: 0 0 0 6px var(--moss-tint); } to { box-shadow: 0 0 0 6px transparent; } }
   @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 
   /* Markdown from the agent: github-markdown-css + highlight.js (github theme),

@@ -725,7 +725,7 @@ function renderLinks() {
         gh.append(el('span', 'name', LINK_GROUPS[g.kind]), el('span', 'count', String(g.items.length)), el('span', 'chev'));
         gh.onclick = () => toggleLinkGroup(key);
         const list = el('ul', 'links-list');
-        for (const item of g.items) list.append(linkRow(item, thread.linksFresh.get(item.url), now));
+        for (const item of g.items) list.append(linkRow(item, thread.linksFresh.get(item.url), now, thread.linkLoading === item.seq));
         section.append(gh, list);
         nodes.push(section);
     }
@@ -744,7 +744,7 @@ function renderLinks() {
 }
 
 /** One link: its name opens it, the line under it goes back to where it came from. */
-function linkRow(item, freshAt, now) {
+function linkRow(item, freshAt, now, loading) {
     const row = el('li', 'link-row');
     if (freshAt) {
         // Rebuilt rows keep flashing from where they were.
@@ -761,11 +761,51 @@ function linkRow(item, freshAt, now) {
     src.type = 'button';
     src.dataset.seq = String(item.seq);
     src.title = '跳到原文';
-    src.textContent = [item.who === 'user' ? '你' : 'agent', item.at ? messageTime(item.at) : null, item.count > 1 ? `提到 ${item.count} 次` : null]
-        .filter(Boolean).join(' · ');
+    src.textContent = loading ? '正在载入…'
+        : [item.who === 'user' ? '你' : 'agent', item.at ? messageTime(item.at) : null, item.count > 1 ? `提到 ${item.count} 次` : null]
+            .filter(Boolean).join(' · ');
     row.append(a, src);
     return row;
 }
+
+/** Bring the message a link came from into view: older pages load until it is there, its turn unfolds. */
+async function revealSeq(s, thread, seq) {
+    const find = () => thread.el.querySelector(`.msg[data-seq="${seq}"]`);
+    let node = find();
+    if (!node && thread.hasOlder) {
+        thread.linkLoading = seq;
+        renderLinks();
+        try {
+            while (!(node = find()) && thread.hasOlder && state.current === s) {
+                if (thread.loadingOlder) await new Promise((r) => setTimeout(r, 100)); // a scroll is loading one already
+                else await loadOlder(s, thread);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            thread.linkLoading = null;
+            if (state.current === s) renderLinks();
+        }
+    }
+    if (!node || state.current !== s) return;
+    const turn = node.closest('.turn');
+    const block = turn && [...thread.turns.values()].find((b) => b.el === turn);
+    if (block?.collapsed && block.body.contains(node)) {
+        block.userToggled = true;
+        setCollapsed(block, false);
+    }
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    node.classList.remove('flash');
+    void node.offsetWidth; // restart the animation
+    node.classList.add('flash');
+}
+
+$('links').addEventListener('click', (e) => {
+    const src = e.target.closest('.link-src');
+    const s = state.current;
+    const thread = s && state.threads.get(s.id);
+    if (src && thread) revealSeq(s, thread, Number(src.dataset.seq));
+});
 
 /** Fold or unfold a group of links; remembered with the sidebar's folds. */
 function toggleLinkGroup(key) {
