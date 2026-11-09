@@ -70,8 +70,9 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 - 发送文本消息（AES-256-GCM 加密后 `POST /v3/sessions/:id/messages`）
 - 归档：通过 Socket.IO 让 CLI `killSession`（CLI 结束进程并写上 archived）；CLI 不在线时
   web 自己用 `update-metadata` 写 `lifecycleState: "archived"`
-- 归档的是某个 `.dev/worktree/*` 里最后一个在线会话、且那台电脑在线时，会问要不要顺便删掉这个 worktree：经机器 RPC `bash`
-  执行 `git worktree remove`（有未提交的修改或未跟踪的文件时再确认一次才加 `--force`），分支用 `git branch -d` 删，没合并的保留
+- 归档的是某个 `.dev/worktree/*` 里最后一个在线会话时，点归档的对话框里多一项「同时删除 worktree」（默认勾上，电脑离线时不可选），
+  和进程会中断的提醒放在一起，点完不用再等。归档成功后经机器 RPC `bash` 执行 `git worktree remove`
+  （有未提交的修改或未跟踪的文件时再确认一次才加 `--force`），分支用 `git branch -d` 删，没合并的保留
   归档成功后自动打开列表里的下一个在线会话（它是最后一个就打开上一个）；归档过程中切走了就不跳
 
 - 设置页（侧栏顶部「设置」）：Claude / Codex / Gemini 各自的默认模型和强度，存在本浏览器。给会话发消息时没在输入框下方单独选，

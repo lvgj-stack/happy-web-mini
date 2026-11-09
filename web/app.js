@@ -2060,7 +2060,15 @@ const archiveCurrent = () => archiveSession(state.current);
 async function archiveSession(s) {
     if (!s || isArchived(s) || s.archiving) return;
     const what = s === state.current ? '' : `「${sessionTitle(s)}」`;
-    if (s.active && !confirm(`归档${what}后，这台电脑上的会话进程会结束，正在进行的任务会中断。确定归档？`)) return;
+    // Asked up front, in one dialog with the archive's own warning, so nothing pops up once it is done.
+    const worktree = lastInWorktree(s);
+    let dropWorktree = false;
+    if (s.active || worktree) {
+        const answer = await askArchive(s, what, worktree);
+        if (!answer) return;
+        dropWorktree = answer.dropWorktree;
+    }
+    if (isArchived(s) || s.archiving) return; // archived elsewhere while the dialog was up
     s.archiving = true;
     renderArchiveButton();
     // Where to go afterwards: the next session in the list, else the one before it.
@@ -2093,24 +2101,60 @@ async function archiveSession(s) {
     // Only if the person is still on it; they may have moved on while it was archiving.
     const next = neighbours.find((n) => n !== s && isOnline(n) && n.meta.isSideChat !== true);
     if (archived && state.current === s && next && !document.body.classList.contains('in-settings')) openSession(next);
-    if (archived) await offerRemoveWorktree(s);
+    if (archived && dropWorktree) await dropArchivedWorktree(s, worktree);
 }
 
 /**
- * The session just archived was the last one in its `.dev/worktree/*` checkout:
- * offer to remove the checkout (and its branch, when merged) so it isn't left behind.
+ * The `.dev/worktree/*` checkout the session runs in, when no other online
+ * session on its computer is in it (archiving it would leave the checkout behind); else null.
  */
-async function offerRemoveWorktree(s) {
+function lastInWorktree(s) {
     const path = worktreeOf((s.meta.path || '').trim());
-    if (!path) return;
+    if (!path) return null;
     const others = [...state.sessions.values()].some((o) => o !== s && isOnline(o)
         && machineKey(o) === machineKey(s) && worktreeOf((o.meta.path || '').trim()) === path);
-    if (others) return;
-    const m = await refreshMachines().then(() => machineOf(s), () => null);
-    if (!m?.online) return; // nothing could carry it out
+    return others ? null : path;
+}
+
+/**
+ * The archive dialog: the warning for a running session, and 「同时删除 worktree」
+ * when it is the checkout's last session. Resolves to { dropWorktree }, or null when cancelled.
+ */
+function askArchive(s, what, worktree) {
+    const dialog = $('archive-dialog');
+    const box = $('archive-worktree');
+    $('archive-title').textContent = `归档${what || '会话'}`;
+    $('archive-text').textContent = s.active ? '归档后，这台电脑上的会话进程会结束，正在进行的任务会中断。' : '';
+    $('archive-worktree-row').hidden = !worktree;
+    box.checked = true;
+    box.disabled = false;
+    if (worktree) {
+        $('archive-worktree-label').textContent = `同时删除 worktree「${worktree.split('/').pop()}」`;
+        const note = $('archive-worktree-note');
+        note.textContent = '这是它里面最后一个会话。分支已合并的话一并删除，没合并的保留。';
+        // Removing it goes through the computer's daemon: no use offering it while that computer is away.
+        refreshMachines().then(() => {
+            if (!dialog.open || machineOf(s)?.online !== false) return;
+            box.checked = false;
+            box.disabled = true;
+            note.textContent = '这台电脑现在离线，删不了。';
+        }, () => {});
+    }
+    dialog.returnValue = ''; // Esc leaves the last value in place
+    dialog.showModal();
+    return new Promise((resolve) => {
+        dialog.addEventListener('close', () => {
+            resolve(dialog.returnValue === 'archive' ? { dropWorktree: !!worktree && box.checked && !box.disabled } : null);
+        }, { once: true });
+    });
+}
+
+/** Remove the archived session's worktree (and its branch, when merged) on its computer. */
+async function dropArchivedWorktree(s, path) {
     const name = path.split('/').pop();
-    if (!confirm(`「${name}」这个 worktree 里已经没有其他会话了，要删掉它吗？\n\n`
-        + `会在 ${s.meta.host || '这台电脑'} 上执行 git worktree remove；分支已合并的话一并删除，没合并的保留。`)) return;
+    const m = await refreshMachines().then(() => machineOf(s), () => null);
+    if (!m?.online) { notice(`这台电脑离线，worktree「${name}」没有删除`); return; }
+    notice(`正在删除 worktree「${name}」…`);
     const bash = (command, cwd) => machineBash(m, command, cwd);
     try {
         let r;
@@ -2622,6 +2666,7 @@ $('new-cancel').onclick = () => $('new-session').close();
 $('new-machine').onchange = () => { $('new-dir').value = ''; renderNewForm(); };
 $('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
+$('archive-cancel').onclick = () => $('archive-dialog').close();
 $('resume').onclick = () => resumeSession(state.current);
 $('send').onclick = send;
 $('attach').onclick = () => $('file').click();
