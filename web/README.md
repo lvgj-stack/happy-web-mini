@@ -70,6 +70,8 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 - 发送文本消息（AES-256-GCM 加密后 `POST /v3/sessions/:id/messages`）
 - 归档：通过 Socket.IO 让 CLI `killSession`（CLI 结束进程并写上 archived）；CLI 不在线时
   web 自己用 `update-metadata` 写 `lifecycleState: "archived"`
+- 归档的是某个 `.dev/worktree/*` 里最后一个在线会话、且那台电脑在线时，会问要不要顺便删掉这个 worktree：经机器 RPC `bash`
+  执行 `git worktree remove`（有未提交的修改或未跟踪的文件时再确认一次才加 `--force`），分支用 `git branch -d` 删，没合并的保留
   归档成功后自动打开列表里的下一个在线会话（它是最后一个就打开上一个）；归档过程中切走了就不跳
 
 - 设置页（侧栏顶部「设置」）：Claude / Codex / Gemini 各自的默认模型和强度，存在本浏览器。给会话发消息时没在输入框下方单独选，
@@ -107,7 +109,7 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 - `defaults.js` — 默认模型/强度的存取和对某个会话是否适用
 - `tools.js` — 每种工具的图标、一行摘要和详情，时长格式；图标用 Lucide（`lucide-static`，按需引入单个图标）
 - `attachments.js` — 图片压缩、加密上传、file 事件、下载解密，对照 iOS 的 HappyAPI+Attachments / BlobCipher
-- `worktree.js` — 新建会话里的 worktree：列出、新建（经 daemon 的 `bash` RPC）
+- `worktree.js` — worktree：列出、新建、归档最后一个会话后删除（经 daemon 的 `bash` RPC）
 - `desktop.js` — 需要你的会话数（Mac 应用的 Dock 角标 / 浏览器的标签页标题）和系统通知，两边共用一个开关
 - `test/` — `npm test`
 - `index.html` — 页面和样式

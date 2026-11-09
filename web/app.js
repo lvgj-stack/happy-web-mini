@@ -20,7 +20,7 @@ import { resumeAvailability, resumeFallback } from './resume.js';
 import { messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
-import { createWorktree, listWorktrees, repoOf } from './worktree.js';
+import { createWorktree, listWorktrees, removeWorktree, repoOf, worktreeOf } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { fitToViewport } from './viewport.js';
@@ -2093,6 +2093,38 @@ async function archiveSession(s) {
     // Only if the person is still on it; they may have moved on while it was archiving.
     const next = neighbours.find((n) => n !== s && isOnline(n) && n.meta.isSideChat !== true);
     if (archived && state.current === s && next && !document.body.classList.contains('in-settings')) openSession(next);
+    if (archived) await offerRemoveWorktree(s);
+}
+
+/**
+ * The session just archived was the last one in its `.dev/worktree/*` checkout:
+ * offer to remove the checkout (and its branch, when merged) so it isn't left behind.
+ */
+async function offerRemoveWorktree(s) {
+    const path = worktreeOf((s.meta.path || '').trim());
+    if (!path) return;
+    const others = [...state.sessions.values()].some((o) => o !== s && isOnline(o)
+        && machineKey(o) === machineKey(s) && worktreeOf((o.meta.path || '').trim()) === path);
+    if (others) return;
+    const m = await refreshMachines().then(() => machineOf(s), () => null);
+    if (!m?.online) return; // nothing could carry it out
+    const name = path.split('/').pop();
+    if (!confirm(`「${name}」这个 worktree 里已经没有其他会话了，要删掉它吗？\n\n`
+        + `会在 ${s.meta.host || '这台电脑'} 上执行 git worktree remove；分支已合并的话一并删除，没合并的保留。`)) return;
+    const bash = (command, cwd) => machineBash(m, command, cwd);
+    try {
+        let r;
+        try {
+            r = await removeWorktree(path, bash);
+        } catch (e) {
+            if (!e.dirty || !confirm(`「${name}」里有未提交的修改或未跟踪的文件，删掉后这些改动就没了。仍要删除？`)) throw e;
+            r = await removeWorktree(path, bash, { force: true });
+        }
+        notice(`已删除 worktree「${name}」` + (r.branchDeleted ? `和分支 ${r.branch}`
+            : r.branch ? `，分支 ${r.branch} 还没合并，保留了` : ''));
+    } catch (e) {
+        notice(`worktree「${name}」没有删除：${e.message}`);
+    }
 }
 
 // ---------- List menu ----------

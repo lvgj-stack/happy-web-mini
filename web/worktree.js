@@ -67,3 +67,34 @@ export async function createWorktree(path, bash, random = Math.random) {
     }
     throw new Error(`${r.stderr}`.trim() || '建 worktree 失败');
 }
+
+/** The worktree checkout a path is in (`<repo>/.dev/worktree/<name>`), or null for any other path. */
+export function worktreeOf(path) {
+    const at = path.indexOf(WORKTREE_MARKER);
+    if (at < 0) return null;
+    const name = path.slice(at + WORKTREE_MARKER.length).split('/')[0];
+    return name ? path.slice(0, at + WORKTREE_MARKER.length) + name : null;
+}
+
+const quote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
+/**
+ * Remove a worktree and, when it is merged, its branch (`git branch -d`; an
+ * unmerged one is kept). Resolves to { branch, branchDeleted, branchError }.
+ * Without `force`, a checkout with changes is left alone: the error then has `dirty: true`.
+ */
+export async function removeWorktree(path, bash, { force = false } = {}) {
+    const base = repoOf(path);
+    const current = await bash('git branch --show-current', path); // empty when detached
+    const branch = (current.success && current.stdout.trim()) || null;
+    const r = await bash(`git worktree remove ${force ? '--force ' : ''}${quote(path)}`, base);
+    if (!r.success) {
+        const why = `${r.stderr}`.trim();
+        const error = new Error(why || '删除 worktree 失败');
+        error.dirty = /modified or untracked files/.test(why);
+        throw error;
+    }
+    if (!branch) return { branch: null, branchDeleted: false, branchError: '' };
+    const b = await bash(`git branch -d ${quote(branch)}`, base);
+    return { branch, branchDeleted: b.success, branchError: b.success ? '' : `${b.stderr}`.trim() };
+}

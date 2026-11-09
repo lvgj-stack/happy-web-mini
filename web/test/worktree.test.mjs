@@ -1,11 +1,11 @@
 // node --test: worktree.js against a real git repository, with `bash` run locally.
 import assert from 'node:assert/strict';
 import { exec } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, repoOf } from '../worktree.js';
+import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, removeWorktree, repoOf, worktreeOf } from '../worktree.js';
 
 /** The daemon's `bash` RPC, locally: same result shape. */
 const bash = (command, cwd) => new Promise((resolve) => {
@@ -60,4 +60,47 @@ test('the daemon cannot be reached: its words come through', async () => {
     const down = async () => ({ success: false, stdout: '', stderr: '这台电脑的 daemon 没有响应', exitCode: -1 });
     assert.equal(await listWorktrees(repo, down), null);
     await assert.rejects(createWorktree(repo, down), { message: '这台电脑的 daemon 没有响应' });
+});
+
+test('worktreeOf: the checkout a path is in', () => {
+    assert.equal(worktreeOf('/a/repo/.dev/worktree/x/sub/dir'), '/a/repo/.dev/worktree/x');
+    assert.equal(worktreeOf('/a/repo/.dev/worktree/x'), '/a/repo/.dev/worktree/x');
+    assert.equal(worktreeOf('/a/repo/sub'), null);
+    assert.equal(worktreeOf('/a/repo/.dev/worktree/'), null);
+});
+
+const git = (args, cwd) => bash(`git -c user.email=t@t -c user.name=t ${args}`, cwd);
+
+test('removes a clean worktree and its merged branch', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.5));
+    assert.deepEqual(await removeWorktree(made.path, bash), { branch: made.branch, branchDeleted: true, branchError: '' });
+    assert.ok(!existsSync(made.path));
+    assert.equal((await bash(`git branch --list ${made.branch}`, repo)).stdout.trim(), '');
+});
+
+test('an unmerged branch is kept', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.6));
+    await git('commit -q --allow-empty -m work', made.path);
+    const r = await removeWorktree(made.path, bash);
+    assert.equal(r.branchDeleted, false);
+    assert.match(r.branchError, /not fully merged/);
+    assert.ok(!existsSync(made.path));
+    assert.equal((await bash(`git branch --list ${made.branch}`, repo)).stdout.trim(), made.branch);
+});
+
+test('changes in it: refused as dirty unless forced', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.7));
+    writeFileSync(join(made.path, 'new.txt'), 'x');
+    await assert.rejects(removeWorktree(made.path, bash), { dirty: true });
+    assert.ok(existsSync(made.path));
+    assert.equal((await removeWorktree(made.path, bash, { force: true })).branchDeleted, true);
+    assert.ok(!existsSync(made.path));
+});
+
+test('a detached worktree: no branch is touched', async () => {
+    const path = `${repo}/.dev/worktree/loose`;
+    await bash(`git worktree add --detach ${path}`, repo);
+    await bash('git branch loose', repo); // same name as the folder, must survive
+    assert.deepEqual(await removeWorktree(path, bash), { branch: null, branchDeleted: false, branchError: '' });
+    assert.equal((await bash('git branch --list loose', repo)).stdout.trim(), 'loose');
 });
