@@ -619,6 +619,7 @@ function renderHead() {
     $('composer').hidden = !s || isDisconnected(s);
     $('readonly').hidden = !s || !isDisconnected(s);
     renderResume();
+    renderLinks();
     if (!s) {
         $('chat-title').textContent = '';
         $('chat-sub').replaceChildren();
@@ -701,7 +702,11 @@ function renderLinks() {
     const groups = thread?.links ? thread.links.list() : [];
     const total = groups.reduce((n, g) => n + g.items.length, 0);
     box.hidden = total === 0;
-    if (!total) { box.replaceChildren(); return; }
+    const toggle = $('links-toggle');
+    toggle.hidden = total === 0;
+    toggle.innerHTML = iconSvg('link');
+    toggle.append(el('span', 'label', String(total)));
+    if (!total) { box.replaceChildren(); closeLinksPopover(); return; }
 
     const head = el('div', 'links-head');
     const close = el('button', 'icon-btn links-close');
@@ -709,6 +714,7 @@ function renderLinks() {
     close.setAttribute('aria-label', '收起');
     close.title = '收起';
     close.innerHTML = iconSvg('close');
+    close.onclick = () => (box.classList.contains('open') ? closeLinksPopover() : setLinksHidden(true));
     head.append(el('h3', null, `链接 · ${total}`), close);
 
     const now = Date.now();
@@ -805,7 +811,47 @@ $('links').addEventListener('click', (e) => {
     const s = state.current;
     const thread = s && state.threads.get(s.id);
     if (src && thread) revealSeq(s, thread, Number(src.dataset.seq));
+    if (src || e.target.closest('.link-name')) closeLinksPopover();
 });
+
+// Docked in the right margin when the main area has room (CSS decides), else a popover from the title's toggle.
+const LINKS_WIDE = 1476; // the container query in index.html: 860 + 2 × (260 + 2 × 24)
+const wideMain = () => document.querySelector('main').clientWidth >= LINKS_WIDE;
+
+/** Put the docked panel away (or back); remembered in this browser. */
+function setLinksHidden(hidden) {
+    document.body.classList.toggle('links-hidden', hidden);
+    if (hidden) localStorage.setItem('happy.linksHidden', '1'); else localStorage.removeItem('happy.linksHidden');
+}
+
+function openLinksPopover() {
+    const box = $('links');
+    const t = $('links-toggle').getBoundingClientRect();
+    const m = document.querySelector('main').getBoundingClientRect();
+    box.style.top = `${t.bottom - m.top + 6}px`;
+    box.style.right = `${Math.max(8, m.right - t.right)}px`;
+    box.classList.add('open');
+}
+
+function closeLinksPopover() {
+    const box = $('links');
+    if (!box.classList.contains('open')) return;
+    box.classList.remove('open');
+    box.style.top = box.style.right = '';
+}
+
+$('links-toggle').onclick = () => {
+    if (document.body.classList.contains('links-hidden') && wideMain()) { setLinksHidden(false); return; }
+    if ($('links').classList.contains('open')) closeLinksPopover(); else openLinksPopover();
+};
+document.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('#links, #links-toggle')) closeLinksPopover();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('links').classList.contains('open')) closeLinksPopover();
+});
+window.addEventListener('resize', closeLinksPopover);
+document.body.classList.toggle('links-hidden', localStorage.getItem('happy.linksHidden') === '1');
 
 /** Fold or unfold a group of links; remembered with the sidebar's folds. */
 function toggleLinkGroup(key) {
@@ -902,6 +948,7 @@ async function openSession(s) {
         if (text) state.drafts.set(previous.id, text); else state.drafts.delete(previous.id);
     }
     state.current = s;
+    closeLinksPopover();
     document.body.classList.remove('in-settings');
     document.body.classList.add('in-chat');
     markSelected();

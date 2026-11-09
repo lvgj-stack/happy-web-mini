@@ -33,6 +33,7 @@ import Folder from './node_modules/lucide-static/dist/esm/icons/folder.mjs';
 import GitBranch from './node_modules/lucide-static/dist/esm/icons/git-branch.mjs';
 import RotateCcw from './node_modules/lucide-static/dist/esm/icons/rotate-ccw.mjs';
 import X from './node_modules/lucide-static/dist/esm/icons/x.mjs';
+import Link from './node_modules/lucide-static/dist/esm/icons/link.mjs';
 
 const ICONS = {
     terminal: SquareTerminal,
@@ -66,6 +67,7 @@ const ICONS = {
     folder: Folder,
     branch: GitBranch,
     close: X,
+    link: Link,
 };
 
 /** Filled icons: the glyph is a solid shape, not an outline. */
