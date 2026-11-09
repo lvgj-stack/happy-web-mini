@@ -119,6 +119,9 @@
   .group-head .chev { flex: none; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
   .machine > .rows { padding: 4px; }
   .collapsed > .group-head .chev { transform: rotate(-45deg); }
+  .group-head .mark { display: none; flex: none; width: 7px; height: 7px; border-radius: 50%; }
+  .collapsed > .group-head.unread .mark { display: block; background: var(--moss); }
+  .collapsed > .group-head.asking .mark { display: block; background: #B7791F; }
   .collapsed > .rows { display: none; }
 
   /* Inside a computer: Bot / 任务 under a small label, then the project tree */

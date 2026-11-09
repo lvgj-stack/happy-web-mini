@@ -371,11 +371,14 @@ function waitingNode(className, text) {
     return node;
 }
 
-function groupHead(name, count, collapsed, onToggle, icon = 'computer') {
+function groupHead(name, count, collapsed, onToggle, icon = 'computer', sessions = []) {
     const head = el('button', 'group-head');
     head.setAttribute('aria-expanded', String(!collapsed));
+    // Folded, a dot says a session inside waits for an answer or is unread (as on a project).
+    if (sessions.some((s) => waitingSets(s).length)) head.classList.add('asking');
+    else if (sessions.some(isUnread)) head.classList.add('unread');
     head.insertAdjacentHTML('beforeend', iconSvg(icon));
-    head.append(el('span', 'name', name), el('span', 'count', String(count)), el('span', 'chev'));
+    head.append(el('span', 'name', name), el('span', 'count', String(count)), el('span', 'mark'), el('span', 'chev'));
     head.onclick = onToggle;
     return head;
 }
@@ -498,7 +501,7 @@ function renderList() {
     for (const m of groups) {
         const collapsed = state.collapsed.has(m.key);
         const section = el('section', 'machine' + (collapsed ? ' collapsed' : ''));
-        section.append(groupHead(m.name, m.count, collapsed, () => toggleCollapsed(m.key)));
+        section.append(groupHead(m.name, m.count, collapsed, () => toggleCollapsed(m.key), 'computer', m.sessions));
         const rows = el('div', 'rows');
         if (m.bots.length) rows.append(kindBlock('Bot', 'agent', m.bots.map((s) => row(s))));
         if (m.tasks.length) rows.append(kindBlock('任务', 'todo', m.tasks.map((s) => row(s, taskPath(s)))));
