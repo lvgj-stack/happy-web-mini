@@ -15,13 +15,18 @@
 //
 // History arrives out of order (the newest page first, older ones on scroll),
 // so events are kept by seq and replayed in order whenever asked.
+//
+// None of that is reliable: the CLI drops the SDK's own task_notification, and
+// a task that ends while the agent is mid-turn is reported only inside that
+// turn, which never reaches us. So a task can also be dismissed by hand.
 
 import { stripTaskNotifications } from './localCommand.js';
 
 const SEND = 'SendMessage';
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-export function backgroundTracker() {
+/** `dismissed`: launch call -> seq of the (re)start dismissed by hand; kept by the caller across reloads. */
+export function backgroundTracker({ dismissed = new Map() } = {}) {
     const events = new Map(); // seq -> view that launches, resumes or stops something
     let clearedAt = -Infinity; // the process ended after this seq
     let maxSeq = -Infinity;
@@ -34,20 +39,31 @@ export function backgroundTracker() {
         },
         /** What still runs, oldest first: { id: the launch call, label, since: when it (re)started, ms or null }. */
         tasks() {
-            const state = replayState();
-            let past = false; // replayed beyond the moment the process ended
-            for (const seq of [...events.keys()].sort((x, y) => x - y)) {
-                if (!past && seq > clearedAt) { state.running.clear(); past = true; }
-                state.see(events.get(seq));
-            }
-            if (!past) state.running.clear();
-            return [...state.running.entries()].map(([id, task]) => ({ id, ...task }));
+            return running().filter(({ id, seq }) => dismissed.get(id) !== seq).map(({ id, label, since }) => ({ id, label, since }));
+        },
+        /** What was dismissed by hand, to be saved: [[launch call, seq]]. */
+        dismissed() { return dismissed.entries(); },
+        /** Stop showing a task (its end never reached us); it shows again if it is started again. */
+        dismiss(id) {
+            const task = running().find((t) => t.id === id);
+            if (task) dismissed.set(id, task.seq);
         },
         /** What still runs, oldest first, as shown. */
         labels() { return this.tasks().map((t) => t.label); },
         /** The process is gone: nothing seen so far runs any more. */
         clear() { clearedAt = maxSeq; },
     };
+
+    function running() {
+        const state = replayState();
+        let past = false; // replayed beyond the moment the process ended
+        for (const seq of [...events.keys()].sort((x, y) => x - y)) {
+            if (!past && seq > clearedAt) { state.running.clear(); past = true; }
+            state.see(events.get(seq), seq);
+        }
+        if (!past) state.running.clear();
+        return [...state.running.entries()].map(([id, task]) => ({ id, ...task }));
+    }
 }
 
 function relevant(view) {
@@ -69,11 +85,11 @@ const when = (view) => view.at || view.time || null;
 function replayState() {
     const agents = new Map();  // launch call -> { name, label }
     const aliases = new Map(); // call / name / task id -> launch call
-    const running = new Map(); // launch call -> { label shown, since }
+    const running = new Map(); // launch call -> { label shown, since, seq of the (re)start }
 
     const resolve = (ref) => (ref == null ? undefined : aliases.get(ref) ?? aliases.get(String(ref).toLowerCase()));
 
-    function launch(view) {
+    function launch(view, seq) {
         const a = view.args;
         const name = str(a.name);
         const label = str(a.description) ?? name ?? str(view.title) ?? str(a.command) ?? str(view.name) ?? '后台任务';
@@ -81,10 +97,10 @@ function replayState() {
         aliases.set(view.call, view.call);
         if (name) aliases.set(name.toLowerCase(), view.call);
         running.delete(view.call); // newest last
-        running.set(view.call, { label, since: when(view) });
+        running.set(view.call, { label, since: when(view), seq });
     }
 
-    function resume(view) {
+    function resume(view, seq) {
         const id = resolve(str(view.args?.to));
         if (!id) return; // "main", a teammate, or an agent we never saw start
         const agent = agents.get(id);
@@ -92,7 +108,7 @@ function replayState() {
         aliases.set(view.call, id);
         running.delete(id);
         const label = summary ? `${agent.name ?? agent.label} · ${summary}` : agent.name ?? agent.label;
-        running.set(id, { label, since: when(view) });
+        running.set(id, { label, since: when(view), seq });
     }
 
     function stop({ toolUseId, taskId }) {
@@ -104,10 +120,10 @@ function replayState() {
 
     return {
         running,
-        see(view) {
+        see(view, seq) {
             if (isTaskCall(view)) {
-                if (view.args.run_in_background === true) launch(view);
-                else if (view.name === SEND) resume(view);
+                if (view.args.run_in_background === true) launch(view, seq);
+                else if (view.name === SEND) resume(view, seq);
             }
             for (const s of view?.stops ?? []) stop(s);
         },

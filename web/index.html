@@ -295,6 +295,11 @@
   .bg-task:not(:disabled):hover .bg-label { text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
   .bg-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bg-time { flex: none; color: var(--moss); font-size: 12px; }
+  .bg-list li { display: flex; align-items: center; gap: 6px; }
+  .bg-drop { flex: none; display: inline-flex; padding: 4px; border-radius: 6px; color: var(--muted); }
+  .bg-drop:hover { background: rgba(38, 42, 39, .06); color: var(--ink); }
+  .bg-drop-all { color: var(--muted); font-size: 13px; padding: 4px 0; }
+  .bg-drop-all:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
   .tool-row.flash { animation: flash 1.6s ease-out; border-radius: 6px; }
   @keyframes flash { from { background: var(--moss-tint); } to { background: transparent; } }
   @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }

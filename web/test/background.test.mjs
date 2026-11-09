@@ -157,3 +157,23 @@ test('tasks name the launch call and when each (re)started', () => {
         { id: 'toolu_dev', label: 'Dev · 再补', since: 5000 },
     ]);
 });
+
+test('a task dismissed by hand stays gone, until it is started again', () => {
+    const dismissed = new Map();
+    const t = backgroundTracker({ dismissed });
+    t.see({ kind: 'tool', call: 'toolu_sh', name: 'Bash', args: { command: 'go test', run_in_background: true } }, 1);
+    t.see(agent('toolu_dev', { name: 'Dev', description: '实现' }), 2);
+    t.dismiss('toolu_sh');
+    t.dismiss('toolu_dev');
+    t.dismiss('toolu_unknown'); // not running: nothing to remember
+    assert.deepEqual(t.labels(), []);
+    assert.deepEqual([...dismissed], [['toolu_sh', 1], ['toolu_dev', 2]]);
+    // A reload starts from what was saved.
+    const again = backgroundTracker({ dismissed: new Map(dismissed) });
+    again.see(agent('toolu_dev', { name: 'Dev', description: '实现' }), 2);
+    assert.deepEqual(again.labels(), []);
+    // Woken again by SendMessage: it runs anew.
+    t.see(stops(note('toolu_dev', 'adev')), 3);
+    t.see(send('toolu_s', { to: 'Dev', message: '…' }), 4);
+    assert.deepEqual(t.labels(), ['Dev']);
+});

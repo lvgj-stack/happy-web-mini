@@ -54,6 +54,7 @@ const state = {
     machinesLoading: null,
     listSignature: null,
     seen: JSON.parse(localStorage.getItem('happy.seen') || '{}'), // session id -> newest seq seen in this browser
+    bgDismissed: JSON.parse(localStorage.getItem('happy.bgDismissed') || '{}'), // session id -> [[launch call, seq]]: background tasks cleared by hand
     drafts: new Map(),       // session id -> unsent composer text
     pendingImages: new Map(), // session id -> [{ id, image | null, error? , promise }]: picked, not sent yet
     askDrafts: new Map(),    // "sessionId:questionSetId" -> { questionId: { options, custom } }
@@ -954,7 +955,20 @@ function parseUserText(text) {
 
 /** Keeps `thread.background` in step with what the agent left running (see background.js). */
 function trackBackground(thread, view, seq) {
-    (thread.background ??= backgroundTracker()).see(view, seq);
+    thread.background ??= backgroundTracker({ dismissed: new Map(state.bgDismissed[thread.session.id] ?? []) });
+    thread.background.see(view, seq);
+}
+
+/** Clear background tasks by hand (their end never reached us); remembered in this browser. */
+function dismissBackground(thread, ids) {
+    for (const id of ids) thread.background.dismiss(id);
+    const kept = {};
+    for (const [sid, list] of Object.entries(state.bgDismissed)) if (state.sessions.has(sid)) kept[sid] = list;
+    kept[thread.session.id] = [...thread.background.dismissed()];
+    state.bgDismissed = kept;
+    localStorage.setItem('happy.bgDismissed', JSON.stringify(kept));
+    renderThinking();
+    renderList();
 }
 
 /** The newest context usage a reply reported (see context.js); older pages never replace it. */
@@ -1296,8 +1310,21 @@ function fillBackground(node, thread, tasks) {
             go.disabled = true;
             go.title = '启动它的消息还没载入';
         }
-        item.append(go);
+        const drop = el('button', 'bg-drop');
+        drop.type = 'button';
+        drop.innerHTML = iconSvg('close', 14);
+        drop.title = '清除：它其实已经结束了';
+        drop.setAttribute('aria-label', `清除 ${task.label}`);
+        drop.onclick = () => dismissBackground(thread, [task.id]);
+        item.append(go, drop);
         list.append(item);
+    }
+    if (tasks.length > 1) {
+        const all = el('button', 'bg-drop-all', '全部清除');
+        all.type = 'button';
+        all.title = 'Happy 收不到 agent 忙的时候结束的后台任务，结束了也会一直留在这里';
+        all.onclick = () => dismissBackground(thread, tasks.map((t) => t.id));
+        list.append(el('li', null, all));
     }
     node.replaceChildren(head, list);
     tickBackground(node);
