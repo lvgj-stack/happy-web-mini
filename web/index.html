@@ -362,6 +362,10 @@
   #usage .u-warn { color: #B7791F; }
   #usage .u-over { color: var(--error); font-weight: 600; }
   #usage .u-reset, #usage .u-when { color: #A5ABA5; }
+  #context { flex: none; white-space: nowrap; font-size: 12px; color: var(--muted); cursor: default; }
+  #context.u-warn { color: #B7791F; }
+  #context.u-over { color: var(--error); font-weight: 600; }
+  #context:not([hidden]) + #usage::before { content: "·"; color: var(--rule); }
   @media (max-width: 760px) { #usage .u-when { display: none; } }
   #model, #effort, #permission { max-width: 32%; font: inherit; font-size: 14px; color: var(--muted); background: none; border: 0; padding: 4px 0; cursor: pointer; }
   #model:hover, #effort:hover, #permission:hover { color: var(--ink); }
@@ -495,6 +499,7 @@
           <select id="model" aria-label="模型" hidden></select>
           <select id="effort" aria-label="思考强度" hidden></select>
           <select id="permission" aria-label="权限模式" hidden></select>
+          <span id="context" hidden></span>
           <span id="usage" hidden></span>
           <button id="stop" class="stop round" type="button" aria-label="停止" title="停止" hidden></button>
           <button id="send" class="round" type="button" aria-label="发送" title="发送（回车）"></button>

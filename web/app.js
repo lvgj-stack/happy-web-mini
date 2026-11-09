@@ -23,6 +23,7 @@ import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.j
 import { createWorktree, listWorktrees, removeWorktree, repoOf, worktreeOf } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
+import { contextLine, contextUsage } from './context.js';
 import { fitToViewport } from './viewport.js';
 
 fitToViewport();
@@ -781,8 +782,15 @@ async function fillViewport(s, thread) {
 function decodePage(s, messages) {
     return Promise.all(messages.map(async (m) => ({
         m,
-        view: withSentAt(toView(m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null), m),
+        view: decoded(m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null, m),
     })));
+}
+
+/** A record as shown, with when it was sent and the context usage it reports. */
+function decoded(raw, m) {
+    const view = withSentAt(toView(raw), m);
+    const context = view && contextUsage(raw);
+    return context ? { ...view, context } : view;
 }
 
 /** The server's record time rides along: when a person's message was sent. */
@@ -809,6 +817,7 @@ async function loadOlder(s, thread) {
         for (const { m, view } of decoded) {
             thread.seen.add(m.id);
             trackBackground(thread, view, m.seq);
+            trackContext(thread, view, m.seq);
             const node = placeView(thread, view, m.seq);
             thread.lastSeq = Math.max(thread.lastSeq, m.seq);
             if (node) fragment.append(node);
@@ -850,7 +859,7 @@ async function acceptMessage(s, m) {
     if (thread.seen.has(m.id)) return;
     thread.seen.add(m.id);
     const raw = m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null;
-    renderMessage(thread, withSentAt(toView(raw), m), m.seq);
+    renderMessage(thread, decoded(raw, m), m.seq);
 }
 
 const EVENT_TEXT = {
@@ -937,6 +946,13 @@ function trackBackground(thread, view, seq) {
     (thread.background ??= backgroundTracker()).see(view, seq);
 }
 
+/** The newest context usage a reply reported (see context.js); older pages never replace it. */
+function trackContext(thread, view, seq) {
+    if (!view?.context || seq <= (thread.context?.seq ?? -Infinity)) return;
+    thread.context = { ...view.context, seq };
+    if (thread.session === state.current) renderContext();
+}
+
 function messageNode(view, s) {
     if (view.kind === 'output') return el('pre', 'msg output', view.text);
     if (view.kind === 'image') {
@@ -981,6 +997,7 @@ function renderMessage(thread, view, seq) {
     const stick = shown && box.scrollTop + box.clientHeight >= box.scrollHeight - 80;
     if (view?.kind === 'ack' || view?.ack) thread.awaiting = null; // the agent answered outside a turn
     trackBackground(thread, view, seq);
+    trackContext(thread, view, seq);
     const node = placeView(thread, view, seq);
     if (node) {
         thread.placeholder?.remove();
@@ -1401,6 +1418,20 @@ function renderModelPicker() {
     renderEffortPicker();
     renderPermissionPicker();
     renderUsage();
+    renderContext();
+}
+
+/** "上下文剩 63%": how much of the model's window the conversation still leaves. */
+function renderContext() {
+    const box = $('context');
+    const s = state.current;
+    const context = s && !isArchived(s) ? state.threads.get(s.id)?.context : null;
+    if (!context) { box.hidden = true; box.textContent = ''; return; }
+    const line = contextLine(context);
+    box.textContent = line.text;
+    box.className = `u-${line.level}`;
+    box.title = `${line.title}\n按最近一条回复统计，每条回复后更新`;
+    box.hidden = false;
 }
 
 /** Plan usage (Claude sessions report it after each turn): "5 小时 42% · 7 天 18% · 截至 14:05". */
