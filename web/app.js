@@ -25,6 +25,7 @@ import { createWorktree, listWorktrees, removeWorktree, repoOf, worktreeOf } fro
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
+import { linkTracker, scanHistory } from './links.js';
 import { fitToViewport } from './viewport.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 
@@ -629,6 +630,150 @@ function renderHead() {
     $('chat-sub').replaceChildren(...[s.meta.host, shortPath, status].filter(Boolean).map((t) => el('span', null, t)));
 }
 
+// ---------- Links: the side panel (see links.js) ----------
+
+const LINK_GROUPS = { mr: 'MR / PR', doc: '飞书文档', other: '其他链接' };
+const FLASH_MS = 1600;
+const linksKey = (s) => `happy.links.${s.id}`;
+
+/** What an earlier visit saved: { v, from, to, complete, links }, or null. */
+function readLinkCache(s) {
+    try {
+        const c = JSON.parse(localStorage.getItem(linksKey(s)) || 'null');
+        return c?.v === 1 && Number.isFinite(c.from) && Number.isFinite(c.to) ? c : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveLinks(thread) {
+    if (!thread.linkCover) return;
+    try {
+        localStorage.setItem(linksKey(thread.session), JSON.stringify({ v: 1, ...thread.linkCover, links: thread.links.toJSON() }));
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+/** Feed one message to the panel; `live`: it just arrived, so a new link flashes. */
+function trackLinks(thread, view, seq, live = false) {
+    if ((view?.kind !== 'user' && view?.kind !== 'agent') || !/https?:\/\//i.test(view.text ?? '')) return;
+    const fresh = thread.links.see(view, seq);
+    if (live) for (const url of fresh) thread.linksFresh.set(url, Date.now());
+    if (thread.session === state.current) renderLinks();
+}
+
+/** Read the whole history once for links, in the background (see scanHistory). */
+function startLinkScan(s, thread) {
+    if (thread.linkScan === 'running' || thread.linkScan === 'done') return;
+    if (thread.hasOlder && thread.oldestSeq === LATEST) return; // the first page never came: try on the next open
+    thread.linkScan = 'running';
+    const rerender = () => { if (state.current === s) renderLinks(); };
+    scanHistory({
+        tracker: thread.links,
+        loaded: { from: thread.oldestSeq, to: thread.afterSeq, hasOlder: thread.hasOlder },
+        cache: thread.linkCache,
+        fetchPage: async (before) => {
+            const page = await api('GET', `/v3/sessions/${encodeURIComponent(s.id)}/messages?before_seq=${before}&limit=${PAGE}`);
+            const decoded = await decodePage(s, page.messages.slice().reverse()); // DESC -> ASC
+            return { rows: decoded.map(({ m, view }) => ({ seq: m.seq, view })), hasMore: page.hasMore };
+        },
+        save: (cover) => {
+            thread.linkCache = null; // joined: the saved range is ours now
+            thread.linkCover = { ...cover, to: Math.max(cover.to, thread.linkCover?.to ?? 0, thread.afterSeq) };
+            saveLinks(thread);
+            rerender();
+        },
+        alive: () => true, // switching away does not stop it
+    }).then(({ complete }) => {
+        thread.linkScan = complete ? 'done' : null;
+    }, (e) => {
+        console.error(e);
+        thread.linkScan = 'failed';
+    }).finally(rerender);
+}
+
+/** The panel for the open chat: hidden while it has no links. */
+function renderLinks() {
+    const box = $('links');
+    const s = state.current;
+    const thread = s && state.threads.get(s.id);
+    const groups = thread?.links ? thread.links.list() : [];
+    const total = groups.reduce((n, g) => n + g.items.length, 0);
+    box.hidden = total === 0;
+    if (!total) { box.replaceChildren(); return; }
+
+    const head = el('div', 'links-head');
+    const close = el('button', 'icon-btn links-close');
+    close.type = 'button';
+    close.setAttribute('aria-label', '收起');
+    close.title = '收起';
+    close.innerHTML = iconSvg('close');
+    head.append(el('h3', null, `链接 · ${total}`), close);
+
+    const now = Date.now();
+    for (const [url, at] of thread.linksFresh) if (now - at >= FLASH_MS) thread.linksFresh.delete(url);
+    const nodes = [head];
+    for (const g of groups) {
+        const key = `links:${g.kind}`;
+        // "Other" starts folded, so its key marks it open.
+        const open = g.kind === 'other' ? state.collapsed.has(key) : !state.collapsed.has(key);
+        const section = el('section', `links-group${open ? '' : ' collapsed'}`);
+        const gh = el('button', 'links-group-head');
+        gh.type = 'button';
+        gh.setAttribute('aria-expanded', String(open));
+        gh.append(el('span', 'name', LINK_GROUPS[g.kind]), el('span', 'count', String(g.items.length)), el('span', 'chev'));
+        gh.onclick = () => toggleLinkGroup(key);
+        const list = el('ul', 'links-list');
+        for (const item of g.items) list.append(linkRow(item, thread.linksFresh.get(item.url), now));
+        section.append(gh, list);
+        nodes.push(section);
+    }
+    if (thread.linkScan === 'running') nodes.push(el('p', 'links-status', '正在查找更早的消息…'));
+    if (thread.linkScan === 'failed') {
+        const line = el('p', 'links-status', '更早的消息未扫完 · ');
+        const retry = el('button', null, '重试');
+        retry.type = 'button';
+        retry.onclick = () => { thread.linkScan = null; startLinkScan(s, thread); renderLinks(); };
+        line.append(retry);
+        nodes.push(line);
+    }
+    const top = box.scrollTop;
+    box.replaceChildren(...nodes);
+    box.scrollTop = top;
+}
+
+/** One link: its name opens it, the line under it goes back to where it came from. */
+function linkRow(item, freshAt, now) {
+    const row = el('li', 'link-row');
+    if (freshAt) {
+        // Rebuilt rows keep flashing from where they were.
+        row.classList.add('flash');
+        row.style.animationDelay = `-${now - freshAt}ms`;
+    }
+    const a = el('a', 'link-name');
+    a.href = item.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.title = item.url;
+    a.append(el('span', 'label', item.label), el('span', 'ext', '↗'));
+    const src = el('button', 'link-src');
+    src.type = 'button';
+    src.dataset.seq = String(item.seq);
+    src.title = '跳到原文';
+    src.textContent = [item.who === 'user' ? '你' : 'agent', item.at ? messageTime(item.at) : null, item.count > 1 ? `提到 ${item.count} 次` : null]
+        .filter(Boolean).join(' · ');
+    row.append(a, src);
+    return row;
+}
+
+/** Fold or unfold a group of links; remembered with the sidebar's folds. */
+function toggleLinkGroup(key) {
+    if (state.collapsed.has(key)) state.collapsed.delete(key); else state.collapsed.add(key);
+    localStorage.setItem('happy.collapsed', JSON.stringify([...state.collapsed]));
+    renderLinks();
+}
+
 // ---------- Resume ----------
 
 const isDisconnected = (s) => isArchived(s) || !s.active;
@@ -749,6 +894,12 @@ async function openSession(s) {
             placeholder: null,
             scrollTop: null,
         };
+        const linkCache = readLinkCache(s);
+        thread.links = linkTracker(linkCache);
+        thread.linkCache = linkCache && { from: linkCache.from, to: linkCache.to, complete: !!linkCache.complete };
+        thread.linkCover = null;    // what the saved links cover, once the scan has joined the cache
+        thread.linkScan = null;     // running | done | failed
+        thread.linksFresh = new Map(); // url -> when it arrived live: flashes in the panel
         state.threads.set(s.id, thread);
         // Only the newest page is fetched before showing; older ones load on
         // scroll. A slow load still gets a placeholder; a fast one never blinks.
@@ -769,6 +920,7 @@ async function openSession(s) {
     }
     showThread(s, thread);
     markRead(s);
+    startLinkScan(s, thread);
     pollMessages(s); // whatever arrived after the newest page, or while cached
     // Socket pushes new messages; polling only covers a dropped connection.
     state.messageTimer = setInterval(() => { if (!socket?.connected) pollMessages(state.current); }, 3000);
@@ -779,6 +931,7 @@ function showThread(s, thread) {
     const box = $('scroll');
     box.scrollTop = thread.scrollTop ?? box.scrollHeight;
     renderThinking();
+    renderLinks();
     fillViewport(s, thread);
 }
 
@@ -830,6 +983,7 @@ async function loadOlder(s, thread) {
             thread.seen.add(m.id);
             trackBackground(thread, view, m.seq);
             trackContext(thread, view, m.seq);
+            trackLinks(thread, view, m.seq);
             const node = placeView(thread, view, m.seq);
             thread.lastSeq = Math.max(thread.lastSeq, m.seq);
             if (node) fragment.append(node);
@@ -1023,6 +1177,7 @@ function renderMessage(thread, view, seq) {
     if (view?.kind === 'ack' || view?.ack) thread.awaiting = null; // the agent answered outside a turn
     trackBackground(thread, view, seq);
     trackContext(thread, view, seq);
+    trackLinks(thread, view, seq, true);
     const node = placeView(thread, view, seq);
     if (node) {
         thread.placeholder?.remove();
@@ -1040,6 +1195,11 @@ function renderMessage(thread, view, seq) {
         }
     }
     thread.lastSeq = Math.max(thread.lastSeq, seq);
+    if (thread.linkCover) {
+        // Pushes and polls continue the loaded range, so what is saved grows with them.
+        thread.linkCover.to = Math.max(thread.linkCover.to, thread.afterSeq);
+        saveLinks(thread);
+    }
     if (thread.session === state.current) { renderThinking(); markRead(thread.session); }
     if (stick) box.scrollTop = box.scrollHeight;
     if (!shown) thread.scrollTop = null; // reopen at the newest message

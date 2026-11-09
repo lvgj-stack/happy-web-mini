@@ -236,6 +236,34 @@
   #back { display: none; margin-top: 6px; }
   #archive { margin-top: 6px; flex: none; }
   #notice { font-size: 14px; padding-bottom: 8px; }
+  /* Links the chat mentions: docked in the right margin when the main area is wide enough */
+  main { container-type: inline-size; }
+  #links { display: none; font-size: 13px; line-height: 1.5; }
+  @container (min-width: 1476px) {
+    #links:not([hidden]) { display: block; position: absolute; top: 28px; right: 24px; width: 260px; max-height: calc(100% - 52px); overflow-y: auto; }
+    body.desktop-mac #links:not([hidden]) { top: 44px; }
+  }
+  .links-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .links-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .links-close { width: 28px; height: 28px; }
+  .links-close svg { width: 16px; height: 16px; }
+  .links-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 0; font-size: 12px; color: var(--muted); }
+  .links-group-head .count { min-width: 18px; padding: 0 5px; line-height: 16px; text-align: center; background: var(--paper); border-radius: 8px; }
+  .links-group-head .chev { margin-left: auto; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+  .links-group.collapsed .chev { transform: rotate(-45deg); }
+  .links-group.collapsed .links-list { display: none; }
+  .links-list { list-style: none; margin: 0 0 6px; padding: 0; }
+  .link-row { padding: 5px 8px; margin: 0 -8px; border-radius: 6px; }
+  .link-row:hover { background: rgba(38, 42, 39, .04); }
+  .link-row.flash { animation: flash 1.6s ease-out; }
+  .link-name { display: flex; gap: 4px; color: var(--ink); text-decoration: none; font-size: 14px; }
+  .link-name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-name .ext { flex: none; color: var(--muted); }
+  .link-name:hover .label { text-decoration: underline; }
+  .link-src { display: block; max-width: 100%; text-align: left; font-size: 12px; color: var(--muted); }
+  .link-src:hover { color: var(--ink); }
+  .links-status { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+  .links-status button { font-size: 12px; color: var(--moss); }
 
   #scroll { flex: 1; overflow-y: auto; }
   #messages { padding-top: 8px; padding-bottom: 32px; }
@@ -510,6 +538,7 @@
       </div>
       <button id="archive" class="quiet" hidden>归档</button>
     </div>
+    <aside id="links" aria-label="链接" hidden></aside>
     <div class="column error" id="notice" role="status"></div>
     <div id="scroll"><div class="column" id="messages"></div></div>
     <section class="column" id="ask" aria-label="等你回答的问题" hidden></section>
