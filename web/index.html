@@ -106,6 +106,21 @@
   #notify-sound-row:not([hidden]) { display: flex; width: fit-content; margin-left: 24px; }
   .check:has(input:disabled) { color: var(--muted); cursor: default; }
   .labelled .field { width: auto; min-width: 150px; color: var(--ink); }
+  /* 背景: one swatch per choice, the picked one ringed */
+  #wallpaper-swatches { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 4px; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 56px; color: var(--muted); font-size: 12px; line-height: 1.4; cursor: pointer; position: relative; }
+  .swatch .chip { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--rule); background: var(--sheet) center / cover no-repeat; color: var(--muted); }
+  .swatch .chip svg { width: 20px; height: 20px; }
+  .swatch:hover .chip { border-color: var(--muted); }
+  .swatch[aria-checked="true"] { color: var(--ink); }
+  .swatch[aria-checked="true"] .chip { box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--moss); border-color: transparent; }
+  .swatch.custom .chip { background: conic-gradient(#F6C7C7, #F6E7B8, #CBEBCF, #C4DDF3, #DCCBF1, #F6C7C7); }
+  .swatch input[type="color"] { position: absolute; inset: 0 4px auto; width: 48px; height: 48px; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+  #wallpaper-image-row:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 12px; }
+  #wallpaper-fade { width: 160px; accent-color: var(--moss); }
+  #wallpaper-fade-value { min-width: 34px; }
+  #wallpaper-error:empty { display: none; }
+  #wallpaper-error { margin: 8px 0 0; }
   #list { flex: 1; overflow-y: auto; padding: 20px 12px 12px; }
 
   /* One card per computer; projects inside it split by a hairline */
@@ -520,6 +535,18 @@
       <h3>名称</h3>
       <p class="hint">左上角和浏览器标签页上显示的名字，留空就是 Happy。只保存在这个浏览器里。</p>
       <input id="brand-input" class="field brand-field" maxlength="40" spellcheck="false" autocomplete="off" placeholder="Happy" aria-label="名称">
+      <h3>背景</h3>
+      <p class="hint">聊天区的背景，可以选颜色或者用自己的图片。图片会在浏览器里压缩后保存，只保存在这个浏览器里。</p>
+      <div id="wallpaper-swatches" role="radiogroup" aria-label="背景"></div>
+      <div id="wallpaper-image-row" hidden>
+        <label class="labelled" for="wallpaper-fade">淡化</label>
+        <input type="range" id="wallpaper-fade" min="0" max="0.95" step="0.05">
+        <span id="wallpaper-fade-value" class="quiet"></span>
+        <button id="wallpaper-change" class="quiet" type="button">换一张</button>
+        <button id="wallpaper-remove" class="quiet" type="button">移除图片</button>
+      </div>
+      <p class="error" id="wallpaper-error"></p>
+      <input type="file" id="wallpaper-file" accept="image/png,image/jpeg,image/webp,image/gif,image/*" hidden>
       <div id="notify-section">
         <h3>通知</h3>
         <label class="check"><input type="checkbox" id="notify-toggle"> 任务完成或等你回答时发系统通知</label>

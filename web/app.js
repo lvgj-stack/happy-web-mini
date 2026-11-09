@@ -25,6 +25,7 @@ import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
 import { fitToViewport } from './viewport.js';
+import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 
 fitToViewport();
 
@@ -1916,6 +1917,81 @@ function applyBrand() {
     document.title = state.badge ? `(${state.badge}) ${name}` : name;
 }
 
+/** The chat area's background, as picked in settings. */
+function applyWallpaper() {
+    Object.assign(document.querySelector('main').style, wallpaperStyle(readWallpaper(localStorage)));
+}
+
+/** 背景 in settings: presets, a color of your own, and a picture. */
+function renderWallpaperSetting() {
+    const w = readWallpaper(localStorage);
+    const box = $('wallpaper-swatches');
+    const swatch = (cls, name, checked, onPick, tag = 'button') => {
+        const b = el(tag, 'swatch' + (cls ? ` ${cls}` : ''));
+        if (tag === 'button') { b.type = 'button'; b.setAttribute('role', 'radio'); }
+        b.setAttribute('aria-checked', String(checked));
+        b.title = name;
+        const chip = el('span', 'chip');
+        b.append(chip, el('span', null, name));
+        if (onPick) b.onclick = onPick;
+        return { b, chip };
+    };
+    const pickColor = (color) => () => { setWallpaperColor(localStorage, color); wallpaperChanged(); };
+    const presetPicked = w.kind === 'default' || PRESETS.some((p) => p.color && p.color === w.color);
+    const items = PRESETS.map((p) => {
+        const { b, chip } = swatch('', p.name, p.color ? w.kind === 'color' && w.color === p.color : w.kind === 'default', pickColor(p.color));
+        if (p.color) chip.style.backgroundColor = p.color;
+        return b;
+    });
+    // A color of your own: a label around the native picker, which sits invisibly on the chip.
+    const custom = swatch('custom', '自定义', w.kind === 'color' && !presetPicked, null, 'label');
+    if (w.kind === 'color' && !presetPicked) custom.chip.style.background = w.color;
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = (w.kind === 'color' ? w.color : '#E8F1EA').toLowerCase();
+    input.setAttribute('aria-label', '自定义颜色');
+    input.oninput = () => {
+        setWallpaperColor(localStorage, input.value.toUpperCase());
+        applyWallpaper();
+        custom.chip.style.background = input.value;
+    };
+    input.onchange = () => wallpaperChanged();
+    custom.b.append(input);
+    // The picture: the kept one comes back with a click, else pick one.
+    const image = swatch('image', '图片', w.kind === 'image', () => {
+        if (!w.image || w.kind === 'image') { $('wallpaper-file').click(); return; }
+        setWallpaperImage(localStorage);
+        wallpaperChanged();
+    });
+    if (w.image) image.chip.style.backgroundImage = `url("${w.image}")`;
+    else image.chip.insertAdjacentHTML('beforeend', iconSvg('image'));
+    box.replaceChildren(...items, custom.b, image.b);
+
+    $('wallpaper-image-row').hidden = w.kind !== 'image';
+    if (document.activeElement !== $('wallpaper-fade')) $('wallpaper-fade').value = String(w.fade);
+    $('wallpaper-fade-value').textContent = `${Math.round(w.fade * 100)}%`;
+}
+
+function wallpaperChanged() {
+    $('wallpaper-error').textContent = '';
+    applyWallpaper();
+    renderWallpaperSetting();
+    settingsSaved();
+}
+
+async function pickWallpaperFile(file) {
+    if (!file) return;
+    $('wallpaper-error').textContent = '';
+    try {
+        setWallpaperImage(localStorage, await prepareWallpaper(file));
+    } catch (e) {
+        const full = e?.name === 'QuotaExceededError';
+        $('wallpaper-error').textContent = full ? '这个浏览器的存储空间不够，换一张小一点的图片再试' : e.message;
+        return;
+    }
+    wallpaperChanged();
+}
+
 function openSettings() {
     document.body.classList.add('in-settings', 'in-chat');
     renderSettings();
@@ -1931,6 +2007,7 @@ function closeSettings() {
 function renderSettings() {
     if (document.activeElement !== $('brand-input')) $('brand-input').value = localStorage.getItem('happy.brand') || '';
     renderNotifySetting();
+    renderWallpaperSetting();
     const defaults = loadDefaults();
     const box = $('defaults');
     box.replaceChildren();
@@ -2748,6 +2825,15 @@ $('brand-input').addEventListener('input', () => {
     applyBrand();
 });
 $('brand-input').addEventListener('change', settingsSaved);
+$('wallpaper-file').onchange = () => { pickWallpaperFile($('wallpaper-file').files[0]); $('wallpaper-file').value = ''; };
+$('wallpaper-change').onclick = () => $('wallpaper-file').click();
+$('wallpaper-remove').onclick = () => { removeWallpaperImage(localStorage); wallpaperChanged(); };
+$('wallpaper-fade').addEventListener('input', () => {
+    setWallpaperFade(localStorage, Number($('wallpaper-fade').value));
+    applyWallpaper();
+    $('wallpaper-fade-value').textContent = `${Math.round(Number($('wallpaper-fade').value) * 100)}%`;
+});
+$('wallpaper-fade').addEventListener('change', settingsSaved);
 $('notify-toggle').addEventListener('change', async () => {
     const result = await setNotifications($('notify-toggle').checked);
     renderNotifySetting(result);
@@ -2758,6 +2844,7 @@ $('notify-sound').addEventListener('change', () => {
     settingsSaved();
 });
 applyBrand();
+applyWallpaper();
 document.addEventListener('visibilitychange', () => markRead(state.current));
 window.addEventListener('focus', () => markRead(state.current));
 
