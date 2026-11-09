@@ -387,10 +387,19 @@ function groupHead(name, count, collapsed, onToggle, icon = 'computer', sessions
 /** 等你批准 when all it waits on are tool approvals, else 等你回答. */
 const waitingLabel = (s) => (waitingSets(s).every((set) => set.via === 'approval') ? '等你批准' : '等你回答');
 
-/** 等你回答 > 正在工作 > 闲置: what the row's icon says. */
+/** Between turns, but a subagent or command it started in the background still runs (known once opened here). */
+function inBackground(s) {
+    return !s.thinking && !!s.active && !isArchived(s) && (state.threads.get(s.id)?.background?.tasks().length ?? 0) > 0;
+}
+
+/** In a turn, or something it started still runs in the background: the row spins. */
+const isWorking = (s) => !!s.thinking || inBackground(s);
+
+/** 等你回答 > 正在工作 / 后台运行中 > 闲置: what the row's icon says. */
 function rowStatus(s) {
     if (waitingSets(s).length) return waitingLabel(s);
     if (s.thinking) return '正在工作';
+    if (inBackground(s)) return '后台运行中';
     return isUnread(s) ? '已完成，还没看' : '闲置';
 }
 
@@ -422,7 +431,7 @@ function hasUnseen(s) {
 
 /** The "done, unread" mark: unseen, not working, and settled (no flashes between turns). */
 function isUnread(s) {
-    return hasUnseen(s) && !s.thinking && Date.now() - (s.changedAt ?? 0) >= UNREAD_SETTLE;
+    return hasUnseen(s) && !isWorking(s) && Date.now() - (s.changedAt ?? 0) >= UNREAD_SETTLE;
 }
 
 /** A message arrived or work started/stopped: look again once it has settled. */
@@ -451,7 +460,7 @@ function markRead(s) {
 function row(s, sub) {
     const r = el('button', 'row');
     r.dataset.id = s.id;
-    if (s.thinking) r.classList.add('busy');
+    if (isWorking(s)) r.classList.add('busy');
     if (waitingSets(s).length) r.classList.add('asking');
     if (isUnread(s)) r.classList.add('unread');
     r.title = rowStatus(s);
@@ -490,7 +499,7 @@ function renderList() {
 
     // Rebuild only when what the list shows changed; heartbeats alone do not.
     const signature = JSON.stringify([[...state.collapsed], groups.map((m) =>
-        [m.key, m.name, m.sessions.map((s) => [s.id, sessionTitle(s), kindOf(s), JSON.stringify(checkout(s)), s.meta.task?.folderName, waitingSets(s).length, isUnread(s)])]),
+        [m.key, m.name, m.sessions.map((s) => [s.id, sessionTitle(s), kindOf(s), JSON.stringify(checkout(s)), s.meta.task?.folderName, waitingSets(s).length, isUnread(s), inBackground(s)])]),
         archived.length, state.archivedOpen, archived.length > archivedRows.length,
         archivedRows.map((s) => [s.id, sessionTitle(s), s.meta.path, s.meta.host, archivedAt(s)])]);
     if (signature === state.listSignature) return;
@@ -1114,7 +1123,7 @@ function addToTurn(thread, block, view, seq) {
                 s.thinkingMutedUntil = Date.now() + THINKING_MUTE;
                 if (s.thinking) sessionChanged(s);
                 s.thinking = false;
-                document.querySelector(`#list .row[data-id="${CSS.escape(s.id)}"]`)?.classList.remove('busy');
+                document.querySelector(`#list .row[data-id="${CSS.escape(s.id)}"]`)?.classList.toggle('busy', isWorking(s));
             }
             break;
         }
@@ -2082,11 +2091,11 @@ function onEphemeral(e) {
     const thinking = !!e.thinking && e.active && !stale;
     if (thinking !== !!s.thinking) sessionChanged(s);
     s.thinking = thinking;
-    renderList(); // rebuilds only if what shows changed (a finished turn may now be unread)
-    const r = $('list').querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
-    if (r) { r.classList.toggle('busy', s.thinking); r.title = rowStatus(s); }
     const thread = state.threads.get(s.id);
     if (changed && !s.active) thread?.background?.clear(); // its process is gone, and the tasks with it
+    renderList(); // rebuilds only if what shows changed (a finished turn may now be unread)
+    const r = $('list').querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
+    if (r) { r.classList.toggle('busy', isWorking(s)); r.title = rowStatus(s); }
     if (changed && thread?.newest) refreshTurn(thread, thread.newest);
     if (s === state.current) { if (changed) renderHead(); renderThinking(); }
 }
