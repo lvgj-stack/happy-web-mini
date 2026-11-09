@@ -84,6 +84,7 @@ function stageApp() {
         fs.copyFileSync(path.join(webRoot, rel), to);
     }
     const info = {
+        source: 'mac-app',
         version: pkg.version,
         commit: git('rev-parse', '--short', 'HEAD') || 'unknown',
         dirty: git('status', '--porcelain', '--untracked-files=no') !== '',
@@ -91,6 +92,7 @@ function stageApp() {
         hash: contentHash(files),
     };
     fs.writeFileSync(path.join(stage, 'build-info.json'), JSON.stringify(info, null, 2));
+    fs.writeFileSync(path.join(stage, 'web', 'build-info.json'), JSON.stringify(info, null, 2)); // for 设置 › 关于
     console.log(`staged ${files.length} page files (${info.commit}${info.dirty ? ', uncommitted changes' : ''})`);
     return info;
 }

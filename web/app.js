@@ -14,6 +14,7 @@ import { agentPermissionOptions, permissionOptions } from './permissions.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
+import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
 import { resumeAvailability, resumeFallback } from './resume.js';
@@ -2002,6 +2003,14 @@ function openSettings() {
     renderSettings();
 }
 
+/** 设置 › 关于: which build of the page this is (see version.js). */
+async function renderAbout() {
+    state.buildInfo ??= loadBuildInfo();
+    const { version, detail } = versionText(await state.buildInfo);
+    $('about-version').textContent = version;
+    $('about-detail').textContent = detail;
+}
+
 function closeSettings() {
     document.body.classList.remove('in-settings');
     if (!state.current) document.body.classList.remove('in-chat');
@@ -2010,6 +2019,7 @@ function closeSettings() {
 
 /** Default model and effort per agent; each change is saved at once. */
 function renderSettings() {
+    renderAbout();
     if (document.activeElement !== $('brand-input')) $('brand-input').value = localStorage.getItem('happy.brand') || '';
     renderNotifySetting();
     renderWallpaperSetting();

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "start": "python3 -m http.server 8080",
+    "start": "node build-info.mjs && python3 -m http.server 8080",
     "test": "node --test 'test/*.test.mjs'"
   },
   "keywords": [],

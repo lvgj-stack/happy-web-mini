@@ -94,6 +94,7 @@
   #settings-back { display: none; }
   #settings-page h3 { font-size: 16px; font-weight: 600; margin: 28px 0 4px; }
   #settings-page .hint { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  .about-version { font: 14px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace; margin: 8px 0 4px; user-select: text; }
   .default-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--rule); }
   .default-row:last-child { border-bottom: 1px solid var(--rule); }
   .agent-name { width: 120px; flex: none; font-weight: 600; }
@@ -563,6 +564,9 @@
       <div id="defaults"></div>
       <h3>账号</h3>
       <button id="logout" class="quiet"></button>
+      <h3>关于</h3>
+      <p id="about-version" class="about-version"></p>
+      <p class="hint" id="about-detail"></p>
     </section>
   </main>
 </div>

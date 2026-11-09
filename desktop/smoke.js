@@ -93,6 +93,12 @@ app.on('browser-window-created', (_e, win) => {
         check(await wc.executeJavaScript(`document.body.classList.contains('in-settings')`), 'Settings… opens settings');
         const notify = await wc.executeJavaScript(`({ shown: !document.getElementById('notify-section').hidden && !!document.getElementById('notify-section').offsetParent, on: document.getElementById('notify-toggle').checked, enabled: !document.getElementById('notify-toggle').disabled })`);
         check(notify.shown && notify.on && notify.enabled, 'settings show the notification switch, on by default');
+        await new Promise((r) => setTimeout(r, 300));
+        const about = await wc.executeJavaScript(`document.getElementById('about-version').textContent`);
+        check(!!about, `settings show the version (${about})`);
+        await wc.executeJavaScript(`(() => { for (const e of document.querySelectorAll('*')) if (e.scrollHeight > e.clientHeight + 10 && /auto|scroll/.test(getComputedStyle(e).overflowY)) e.scrollTop = e.scrollHeight; })()`);
+        await new Promise((r) => setTimeout(r, 200));
+        fs.writeFileSync(path.join(out, 'settings.png'), (await wc.capturePage()).toPNG());
         console.log(`screenshots in ${out}`);
         app.exit(problems.length ? 1 : 0);
     });

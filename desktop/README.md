@@ -43,7 +43,7 @@ npm run build        # 打 arm64 和 x64；只打一个：npm run build -- --arc
 npm run check        # dist/ 里的包是否就是当前网页的构建（落后时退出码 1）
 ```
 
-应用里的页面是打包那一刻的网页代码，网页改了就要重新打包。关于 Happy 面板里显示打包时的 git 提交号（带「+改动」表示有未提交的改动）。
+应用里的页面是打包那一刻的网页代码，网页改了就要重新打包。关于 Happy 面板和页面的 设置 › 关于 里都显示打包时的 git 提交号（带「+改动」/「含未提交的改动」表示有未提交的改动）。
 
 `npm run build` 在 macOS 和 Linux 上都能跑：只复制页面实际引用到的文件（从 index.html 顺着 link/script 和
 ES import 找），用 `assets/` 里的 Happy 图标生成 .icns，用 @electron/packager 打包，在 Mac 上用 `codesign`、
