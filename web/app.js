@@ -6,6 +6,7 @@ import { io } from './node_modules/socket.io-client/dist/socket.io.esm.min.js';
 import { DEFAULT_AGENTS, agentModelOptions, currentEffort, currentModelKey, effortName, effortOptions, isRig, modelMeta, modelOptions } from './models.js';
 import { defaultsFor, loadDefaults, saveDefault } from './defaults.js';
 import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
+import { splitOptions } from './options.js';
 import { addCopyButtons, copyText, handleCopyClicks } from './clipboard.js';
 import { openMenu } from './contextmenu.js';
 import { answerCall, canSubmit, declineCall, pendingQuestions, toggle } from './questions.js';
@@ -1248,7 +1249,19 @@ function messageNode(view, s) {
     }
     if (view.kind === 'agent' || view.kind === 'thinking') {
         const node = el('div', `msg ${view.kind} md markdown-body`);
-        node.innerHTML = renderMarkdown(view.text);
+        const { text, options } = view.kind === 'agent' ? splitOptions(view.text) : { text: view.text, options: [] };
+        node.innerHTML = renderMarkdown(text);
+        if (options.length) {
+            // Pressing a choice sends it as the next message (Happy's `<options>`).
+            const list = el('div', 'md-options');
+            for (const choice of options) {
+                const button = el('button', 'md-option', choice);
+                button.type = 'button';
+                button.dataset.option = choice;
+                list.append(button);
+            }
+            node.append(list);
+        }
         addCopyButtons(node, view.kind === 'agent' ? view.text : null);
         return node;
     }
@@ -1809,11 +1822,16 @@ function chosenModeMeta(s) {
     return meta;
 }
 
-async function send() {
+/**
+ * Send the composer's text and images, or, given `choice` (an `<options>`
+ * button), just that text: the draft and its images stay in the composer.
+ */
+async function send(choice) {
     const s = state.current;
     const input = $('input');
-    const pending = s ? state.pendingImages.get(s.id) ?? [] : [];
-    const text = input.value.trim();
+    const picked = typeof choice === 'string';
+    const pending = s && !picked ? state.pendingImages.get(s.id) ?? [] : [];
+    const text = picked ? choice.trim() : input.value.trim();
     if (!s || isArchived(s) || (!text && pending.length === 0) || state.sending) return;
     state.sending = true;
     const button = $('send');
@@ -1841,15 +1859,17 @@ async function send() {
             localId: uuid(),
         });
         await api('POST', `/v3/sessions/${encodeURIComponent(s.id)}/messages`, { messages });
-        state.drafts.delete(s.id);
-        // Switched chats while uploading: the box now holds the other chat's draft.
-        if (state.current === s) {
-            input.value = '';
-            autosize();
-            hideSlash();
+        if (!picked) {
+            state.drafts.delete(s.id);
+            // Switched chats while uploading: the box now holds the other chat's draft.
+            if (state.current === s) {
+                input.value = '';
+                autosize();
+                hideSlash();
+            }
+            state.pendingImages.delete(s.id);
+            renderTray();
         }
-        state.pendingImages.delete(s.id);
-        renderTray();
         const sentThread = state.threads.get(s.id);
         if (sentThread) { sentThread.awaiting = Date.now(); renderThinking(); }
         if (!socket?.connected) await pollMessages();
@@ -3163,7 +3183,7 @@ $('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
 $('archive-cancel').onclick = () => $('archive-dialog').close();
 $('resume').onclick = () => resumeSession(state.current);
-$('send').onclick = send;
+$('send').onclick = () => send();
 $('attach').onclick = () => $('file').click();
 $('file').onchange = () => { addImages([...$('file').files]); $('file').value = ''; };
 $('input').addEventListener('keyup', (e) => {
@@ -3213,6 +3233,14 @@ $('input').addEventListener('input', () => { autosize(); renderSlash(); renderAc
 $('input').addEventListener('click', renderSlash);
 $('input').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('input')) hideSlash(); }, 0));
 handleCopyClicks($('scroll'));
+$('scroll').addEventListener('click', (e) => {
+    const option = e.target.closest?.('.md-option');
+    if (!option) return;
+    e.preventDefault();
+    e.stopPropagation(); // e.g. don't toggle a folded turn
+    if (state.current && isArchived(state.current)) { notice('会话已归档，不能再发消息'); return; }
+    send(option.dataset.option);
+});
 $('scroll').addEventListener('scroll', () => {
     const s = state.current;
     const thread = s && state.threads.get(s.id);
