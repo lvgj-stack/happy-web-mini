@@ -81,13 +81,21 @@ test('classify: Meego work items', () => {
     assert.equal(classifyLink('https://x.feishu.cn/docx/D1', null).kind, 'doc', 'a document is still a document');
 });
 
+test('classify: Bits', () => {
+    assert.deepEqual(classifyLink('https://bits.bytedance.net/devops/4080853762/pipeline/detail/369776888578', null), { kind: 'bits', label: '流水线 369776888578' });
+    assert.deepEqual(classifyLink('https://bits.bytedance.net/devops/150876/code/detail/123?tab=diff', 'CR'), { kind: 'bits', label: 'CR' });
+    assert.deepEqual(classifyLink('https://bits.bytedance.net/devops/150876/deploy/detail/7', null), { kind: 'bits', label: 'deploy 7' });
+    assert.deepEqual(classifyLink('https://bits.bytedance.net/datamind/employee/dashboard/list', null), { kind: 'bits', label: 'bits.bytedance.net/datamind/employee/dashboard/list' });
+});
+
 test('tracker: groups in order, label from the earliest text, restores from JSON', () => {
     const t = linkTracker();
     t.see(agent('https://a.com/z'), 3);
     t.see(user('[Spec](https://x.feishu.cn/docx/D1)'), 2);
     t.see(agent(MR), 1);
     t.see(agent('https://meego.feishu.cn/merlin/story/detail/1'), 4);
-    assert.deepEqual(t.list().map((g) => g.kind), ['mr', 'doc', 'meego', 'other']);
+    t.see(agent('https://bits.bytedance.net/devops/1/pipeline/detail/2'), 5);
+    assert.deepEqual(t.list().map((g) => g.kind), ['mr', 'doc', 'meego', 'bits', 'other']);
     assert.equal(t.list()[1].items[0].label, 'Spec');
     const back = linkTracker({ links: JSON.parse(JSON.stringify(t.toJSON())) });
     assert.deepEqual(back.list(), t.list());

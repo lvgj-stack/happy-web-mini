@@ -636,7 +636,7 @@ function renderHead() {
 
 // ---------- Links: the side panel (see links.js) ----------
 
-const LINK_GROUPS = { mr: 'MR / PR', doc: '飞书文档', meego: 'Meego', other: '其他链接' };
+const LINK_GROUPS = { mr: 'MR / PR', doc: '飞书文档', meego: 'Meego', bits: 'Bits', other: '其他链接' };
 const FLASH_MS = 1600;
 const linksKey = (s) => `happy.links.${s.id}`;
 

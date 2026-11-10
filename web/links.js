@@ -1,5 +1,5 @@
 // Links a session mentions, gathered for the side panel: MRs / PRs, Feishu
-// documents, Meego work items and the rest. Only what the person and the agent wrote counts;
+// documents, Meego work items, Bits and the rest. Only what the person and the agent wrote counts;
 // tool calls and their output are not looked at.
 
 import { Marked } from './node_modules/marked/lib/marked.esm.js';
@@ -50,6 +50,8 @@ const LABEL_MAX = 60;
 // Meego (飞书项目): meego.feishu.cn/<space>/<type>/detail/<id>.
 const MEEGO_HOSTS = ['meego.feishu.cn', 'project.feishu.cn', 'meego.larkoffice.com', 'project.larkoffice.com', 'meegle.com'];
 const MEEGO_KINDS = { story: '需求', issue: '缺陷', task: '任务', version: '版本', sprint: '迭代' };
+// Bits: bits.bytedance.net/devops/<space>/<type>/detail/<id>.
+const BITS_KINDS = { pipeline: '流水线', code: '代码评审', develop: '开发任务', release: '发布单' };
 const isNumber = (s) => /^\d+$/.test(s ?? '');
 const clip = (label) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1)}…` : label);
 
@@ -75,10 +77,14 @@ export function classifyLink(url, text) {
         const item = segs[2] === 'detail' && isNumber(segs[3]) ? `${MEEGO_KINDS[segs[1]] ?? segs[1]} ${segs[3]}` : null;
         return { kind: 'meego', label: clip(text || item || (host + u.pathname).replace(/\/+$/, '')) };
     }
+    if (host === 'bits.bytedance.net' || host.endsWith('.bits.bytedance.net')) {
+        const item = segs[0] === 'devops' && segs[3] === 'detail' && isNumber(segs[4]) ? `${BITS_KINDS[segs[2]] ?? segs[2]} ${segs[4]}` : null;
+        return { kind: 'bits', label: clip(text || item || (host + u.pathname).replace(/\/+$/, '')) };
+    }
     return { kind: 'other', label: clip(text || (host + u.pathname).replace(/\/+$/, '')) };
 }
 
-const KINDS = ['mr', 'doc', 'meego', 'other'];
+const KINDS = ['mr', 'doc', 'meego', 'bits', 'other'];
 
 /**
  * Links seen so far, one entry per page. Messages arrive in any order (the
