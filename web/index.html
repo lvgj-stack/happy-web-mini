@@ -255,15 +255,16 @@
   .links-head .total { margin-left: 6px; font-weight: 400; color: var(--muted); }
   .links-close { width: 28px; height: 28px; }
   .links-close svg { width: 16px; height: 16px; }
-  .links-group + .links-group { margin-top: 4px; }
-  .links-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 5px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--muted); transition: color .12s, background .12s; }
+  /* Groups are section headings (a rule above, a disclosure arrow in front); their links sit indented under the name. */
+  .links-group + .links-group { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--rule); }
+  .links-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--muted); transition: color .12s, background .12s; }
   .links-group-head:hover { color: var(--ink); background: rgba(38, 42, 39, .04); }
-  .links-group-head .count { min-width: 18px; padding: 0 5px; line-height: 16px; text-align: center; font-weight: 400; font-variant-numeric: tabular-nums; background: var(--paper); border-radius: 8px; }
-  .links-group-head .chev { margin: 0 2px 2px auto; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; }
+  .links-group-head .count { font-weight: 400; font-variant-numeric: tabular-nums; }
+  .links-group-head .chev { flex: none; width: 6px; height: 6px; margin: 0 4px 3px 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; }
   .links-group.collapsed .chev { transform: rotate(-45deg); margin-bottom: 0; }
   .links-group.collapsed .links-list { display: none; }
   .links-list { list-style: none; margin: 0 0 4px; padding: 0; }
-  .link-row { padding: 6px 8px; border-radius: 6px; transition: background .12s; }
+  .link-row { padding: 6px 8px 6px 26px; border-radius: 6px; transition: background .12s; }
   .link-row:hover { background: rgba(38, 42, 39, .04); }
   .link-row.flash { animation: flash 1.6s ease-out; }
   .link-name { display: flex; align-items: flex-start; gap: 6px; color: var(--ink); text-decoration: none; font-size: 13.5px; line-height: 1.45; }

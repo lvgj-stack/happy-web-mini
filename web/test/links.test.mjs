@@ -35,6 +35,26 @@ test('normalize: fragment and trailing slash', () => {
     assert.equal(normalizeUrl('https://a.com/x?q=1#h'), 'https://a.com/x?q=1');
 });
 
+test('normalize: one MR / PR / Meego / Bits item whatever the tab or query', () => {
+    const mr = 'https://code.byted.org/tiktok/merlin-backend/merge_requests/6958';
+    assert.equal(normalizeUrl(`${mr}/diffs?commit_id=abc#note_1`), mr);
+    assert.equal(normalizeUrl(`${mr}?tab=overview`), mr);
+    assert.equal(normalizeUrl('https://gitlab.com/g/r/-/merge_requests/7/'), 'https://gitlab.com/g/r/-/merge_requests/7');
+    assert.equal(normalizeUrl('https://github.com/o/r/pull/42/files'), 'https://github.com/o/r/pull/42');
+    assert.equal(normalizeUrl('https://meego.feishu.cn/merlin/story/detail/7336922231?parentUrl=%2Fx'), 'https://meego.feishu.cn/merlin/story/detail/7336922231');
+    assert.equal(normalizeUrl('https://bits.bytedance.net/devops/1/pipeline/detail/2?tab=log'), 'https://bits.bytedance.net/devops/1/pipeline/detail/2');
+    assert.equal(normalizeUrl('https://a.com/x/merge_requests'), 'https://a.com/x/merge_requests', 'no number, not an item');
+});
+
+test('tracker: a cache with variants of one page merges them', () => {
+    const mr = 'https://code.byted.org/tiktok/merlin-backend/merge_requests/6958';
+    const t = linkTracker({ links: {
+        [`${mr}/diffs`]: { seq: 9, who: 'user', at: 9, text: null, seqs: [9] },
+        [mr]: { seq: 4, who: 'agent', at: 4, text: null, seqs: [4, 6] },
+    } });
+    assert.deepEqual(t.list(), [{ kind: 'mr', items: [{ url: mr, label: 'merlin-backend !6958', who: 'agent', at: 4, seq: 4, count: 3 }] }]);
+});
+
 test('classify: MR / PR', () => {
     assert.deepEqual(classifyLink('https://code.byted.org/seed/fe_mono/merge_requests/1234', 'MR'), { kind: 'mr', label: 'fe_mono !1234' });
     assert.deepEqual(classifyLink('https://gitlab.com/g/sub/repo/-/merge_requests/7', null), { kind: 'mr', label: 'repo !7' });

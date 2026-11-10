@@ -735,7 +735,7 @@ function renderLinks() {
         const gh = el('button', 'links-group-head');
         gh.type = 'button';
         gh.setAttribute('aria-expanded', String(open));
-        gh.append(el('span', 'name', LINK_GROUPS[g.kind]), el('span', 'count', String(g.items.length)), el('span', 'chev'));
+        gh.append(el('span', 'chev'), el('span', 'name', LINK_GROUPS[g.kind]), el('span', 'count', String(g.items.length)));
         gh.onclick = () => toggleLinkGroup(key);
         const list = el('ul', 'links-list');
         for (const item of g.items) list.append(linkRow(item, thread.linksFresh.get(item.url), now, thread.linkLoading === item.seq));

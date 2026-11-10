@@ -20,8 +20,27 @@ function trimEnd(url) {
     }
 }
 
-/** Without its #fragment (a #/ or #! route is kept: it is the page) and trailing slash: one entry per page. */
+// One MR / PR, Meego item or Bits page whatever tab or query the link opens on.
+const ITEM_PATHS = [
+    /^(\/.+\/merge_requests\/\d+)(?:[/?#]|$)/, // GitLab-style MRs
+    /^(\/[^/]+\/[^/]+\/pull\/\d+)(?:[/?#]|$)/, // GitHub PRs
+    /^(\/[^/]+\/[^/]+\/detail\/\d+)(?:[/?#]|$)/, // Meego work items
+    /^(\/devops\/[^/]+\/[^/]+\/detail\/\d+)(?:[/?#]|$)/, // Bits
+];
+
+/**
+ * One entry per page: without its #fragment (a #/ or #! route is kept: it
+ * is the page) and trailing slash; an MR / PR, Meego item or Bits page
+ * also without the tab, query and fragment after its number.
+ */
 export function normalizeUrl(url) {
+    const m = url.match(/^(https?:\/\/[^/?#]+)(\/[^?#]*)?/i);
+    if (m?.[2]) {
+        for (const re of ITEM_PATHS) {
+            const item = m[2].match(re);
+            if (item) return m[1] + item[1];
+        }
+    }
     return url.replace(/#(?![/!]).*$/, '').replace(/\/+$/, '');
 }
 
@@ -94,8 +113,18 @@ const KINDS = ['mr', 'doc', 'meego', 'bits', 'other'];
  */
 export function linkTracker(cached) {
     const links = new Map(); // url -> { seq, who, at, text, seqs: Set }
-    for (const [url, e] of Object.entries(cached?.links ?? {})) {
-        links.set(url, { seq: e.seq, who: e.who, at: e.at ?? null, text: e.text ?? null, seqs: new Set(e.seqs ?? [e.seq]) });
+    for (const [raw, e] of Object.entries(cached?.links ?? {})) {
+        // Older caches kept variants of one page apart: merge them, the earliest mention leading.
+        const url = normalizeUrl(raw);
+        const seqs = e.seqs ?? [e.seq];
+        const had = links.get(url);
+        if (!had) {
+            links.set(url, { seq: e.seq, who: e.who, at: e.at ?? null, text: e.text ?? null, seqs: new Set(seqs) });
+            continue;
+        }
+        for (const q of seqs) had.seqs.add(q);
+        if (e.seq < had.seq) Object.assign(had, { seq: e.seq, who: e.who, at: e.at ?? null, text: e.text ?? had.text });
+        else had.text ??= e.text ?? null;
     }
     return {
         /** Feed one decoded message; returns the URLs it brought in for the first time. */
