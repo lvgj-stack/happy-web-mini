@@ -720,7 +720,9 @@ function renderLinks() {
     close.title = '收起';
     close.innerHTML = iconSvg('close');
     close.onclick = () => (box.classList.contains('open') ? closeLinksPopover() : setLinksHidden(true));
-    head.append(el('h3', null, `链接 · ${total}`), close);
+    const title = el('h3', null, '链接');
+    title.append(el('span', 'total', String(total)));
+    head.append(title, close);
 
     const now = Date.now();
     for (const [url, at] of thread.linksFresh) if (now - at >= FLASH_MS) thread.linksFresh.delete(url);
