@@ -821,8 +821,8 @@ $('links').addEventListener('click', (e) => {
     if (src || e.target.closest('.link-name')) closeLinksPopover();
 });
 
-// Docked in the right margin when the main area has room (CSS decides), else a popover from the title's toggle.
-const LINKS_WIDE = 1476; // the container query in index.html: 860 + 2 × (260 + 2 × 24)
+// Docked on the right when the main area has room (CSS decides), else a popover from the title's toggle.
+const LINKS_WIDE = 1168; // the container query in index.html: 860 + (260 + 2 × 24), the column moving left
 const wideMain = () => document.querySelector('main').clientWidth >= LINKS_WIDE;
 
 /** Put the docked panel away (or back); remembered in this browser. */

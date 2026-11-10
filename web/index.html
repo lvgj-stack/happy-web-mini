@@ -242,7 +242,10 @@
   #links-toggle { margin-top: 6px; flex: none; }
   /* narrow, or put away: a popover under the toggle (placed by script) */
   #links.open:not([hidden]) { display: block; position: absolute; z-index: 20; width: min(320px, calc(100% - 16px)); max-height: 60vh; overflow: hidden auto; padding: 8px 6px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(38, 42, 39, .12); }
-  @container (min-width: 1476px) {
+  /* The column moves left only as far as the docked panel needs: centred from 1476px (860 + 2 × 308) up, flush left at 1168px (860 + 308). */
+  @container (min-width: 1168px) {
+    body:not(.links-hidden):not(.in-settings) main:has(> #links:not([hidden])) .column { --col-left: max(0px, min((100cqw - 860px) / 2, 100cqw - 1168px)); margin-left: var(--col-left); margin-right: auto; }
+    body.side-collapsed:not(.links-hidden):not(.in-settings) main:has(> #links:not([hidden])) #chat-head { padding-left: max(32px, calc(58px - var(--col-left))); }
     body:not(.links-hidden) #links:not([hidden]) { display: block; position: absolute; top: 28px; right: 24px; width: 260px; max-height: calc(100% - 52px); overflow: hidden auto; padding: 0; background: none; border: 0; box-shadow: none; }
     body.desktop-mac:not(.links-hidden) #links:not([hidden]) { top: 44px; }
     body:not(.links-hidden) #links-toggle { display: none; }
