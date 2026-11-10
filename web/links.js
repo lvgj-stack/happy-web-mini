@@ -1,5 +1,5 @@
 // Links a session mentions, gathered for the side panel: MRs / PRs, Feishu
-// documents and the rest. Only what the person and the agent wrote counts;
+// documents, Meego work items and the rest. Only what the person and the agent wrote counts;
 // tool calls and their output are not looked at.
 
 import { Marked } from './node_modules/marked/lib/marked.esm.js';
@@ -47,7 +47,11 @@ export function extractLinks(markdown) {
 const FEISHU_HOSTS = ['feishu.cn', 'larkoffice.com', 'larksuite.com', 'feishu-boe.cn'];
 const DOC_KINDS = { docx: '文档', docs: '文档', wiki: 'Wiki', sheets: '表格', base: '多维表格', mindnotes: '思维笔记', slides: '幻灯片' };
 const LABEL_MAX = 60;
+// Meego (飞书项目): meego.feishu.cn/<space>/<type>/detail/<id>.
+const MEEGO_HOSTS = ['meego.feishu.cn', 'project.feishu.cn', 'meego.larkoffice.com', 'project.larkoffice.com', 'meegle.com'];
+const MEEGO_KINDS = { story: '需求', issue: '缺陷', task: '任务', version: '版本', sprint: '迭代' };
 const isNumber = (s) => /^\d+$/.test(s ?? '');
+const clip = (label) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1)}…` : label);
 
 /** Which group a link goes in, and the name it is shown by. */
 export function classifyLink(url, text) {
@@ -67,12 +71,14 @@ export function classifyLink(url, text) {
     if (FEISHU_HOSTS.some((h) => host === h || host.endsWith(`.${h}`)) && DOC_KINDS[segs[0]] && segs[1]) {
         return { kind: 'doc', label: text || `${DOC_KINDS[segs[0]]} ${segs[1].slice(0, 6)}` };
     }
-    let label = text || (host + u.pathname).replace(/\/+$/, '');
-    if (label.length > LABEL_MAX) label = `${label.slice(0, LABEL_MAX - 1)}…`;
-    return { kind: 'other', label };
+    if (MEEGO_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
+        const item = segs[2] === 'detail' && isNumber(segs[3]) ? `${MEEGO_KINDS[segs[1]] ?? segs[1]} ${segs[3]}` : null;
+        return { kind: 'meego', label: clip(text || item || (host + u.pathname).replace(/\/+$/, '')) };
+    }
+    return { kind: 'other', label: clip(text || (host + u.pathname).replace(/\/+$/, '')) };
 }
 
-const KINDS = ['mr', 'doc', 'other'];
+const KINDS = ['mr', 'doc', 'meego', 'other'];
 
 /**
  * Links seen so far, one entry per page. Messages arrive in any order (the

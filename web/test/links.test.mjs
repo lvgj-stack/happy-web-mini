@@ -73,12 +73,21 @@ test('tracker: earliest wins in any order, one count per seq, normalized', () =>
     assert.deepEqual(t.list(), [{ kind: 'mr', items: [{ url: MR, label: 'fe_mono !9', who: 'user', at: 10, seq: 10, count: 2 }] }]);
 });
 
+test('classify: Meego work items', () => {
+    assert.deepEqual(classifyLink('https://meego.feishu.cn/merlin/story/detail/7336922231', null), { kind: 'meego', label: '需求 7336922231' });
+    assert.deepEqual(classifyLink('https://meego.feishu.cn/merlin/issue/detail/42?parentUrl=x', '登录报错'), { kind: 'meego', label: '登录报错' });
+    assert.deepEqual(classifyLink('https://project.feishu.cn/space/epic/detail/9', null), { kind: 'meego', label: 'epic 9' });
+    assert.deepEqual(classifyLink('https://meego.feishu.cn/merlin', null), { kind: 'meego', label: 'meego.feishu.cn/merlin' });
+    assert.equal(classifyLink('https://x.feishu.cn/docx/D1', null).kind, 'doc', 'a document is still a document');
+});
+
 test('tracker: groups in order, label from the earliest text, restores from JSON', () => {
     const t = linkTracker();
     t.see(agent('https://a.com/z'), 3);
     t.see(user('[Spec](https://x.feishu.cn/docx/D1)'), 2);
     t.see(agent(MR), 1);
-    assert.deepEqual(t.list().map((g) => g.kind), ['mr', 'doc', 'other']);
+    t.see(agent('https://meego.feishu.cn/merlin/story/detail/1'), 4);
+    assert.deepEqual(t.list().map((g) => g.kind), ['mr', 'doc', 'meego', 'other']);
     assert.equal(t.list()[1].items[0].label, 'Spec');
     const back = linkTracker({ links: JSON.parse(JSON.stringify(t.toJSON())) });
     assert.deepEqual(back.list(), t.list());
