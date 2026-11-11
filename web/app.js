@@ -29,6 +29,7 @@ import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
 import { linkTracker, scanHistory } from './links.js';
 import { fitToViewport } from './viewport.js';
+import { SCALES, readChatScale, setChatScale } from './fontscale.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 
 fitToViewport();
@@ -2338,6 +2339,33 @@ function renderWallpaperSetting() {
     $('wallpaper-fade-value').textContent = `${Math.round(w.fade * 100)}%`;
 }
 
+/** 字号: the chat's text, as a factor on its sizes (index.html reads --chat-scale). */
+function applyChatScale() {
+    document.documentElement.style.setProperty('--chat-scale', String(readChatScale(localStorage)));
+    autosize(); // the input's height follows its text
+}
+
+/** 字号 in settings: one swatch per step, each showing its size. */
+function renderChatScaleSetting() {
+    const current = readChatScale(localStorage);
+    $('chat-scale-swatches').replaceChildren(...SCALES.map(({ name, value }) => {
+        const b = el('button', 'swatch');
+        b.type = 'button';
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(value === current));
+        b.title = `${name}（${Math.round(value * 100)}%）`;
+        const chip = el('span', 'chip', '字');
+        chip.style.fontSize = `${17 * value}px`;
+        b.append(chip, el('span', null, name));
+        b.onclick = () => {
+            setChatScale(localStorage, value);
+            applyChatScale();
+            settingsSaved();
+        };
+        return b;
+    }));
+}
+
 function wallpaperChanged() {
     $('wallpaper-error').textContent = '';
     applyWallpaper();
@@ -2384,6 +2412,7 @@ function renderSettings() {
     if (document.activeElement !== $('brand-input')) $('brand-input').value = localStorage.getItem('happy.brand') || '';
     renderNotifySetting();
     renderWallpaperSetting();
+    renderChatScaleSetting();
     const defaults = loadDefaults();
     const box = $('defaults');
     box.replaceChildren();
@@ -3263,6 +3292,7 @@ $('notify-sound').addEventListener('change', () => {
 });
 applyBrand();
 applyWallpaper();
+applyChatScale();
 document.addEventListener('visibilitychange', () => markRead(state.current));
 window.addEventListener('focus', () => markRead(state.current));
 
