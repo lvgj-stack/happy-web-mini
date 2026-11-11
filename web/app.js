@@ -2951,13 +2951,22 @@ async function machineRpc(m, method, params) {
     return r.result ? decryptJSON(m.dataKey, r.result) : null;
 }
 
-/** The new session once the server lists it (the CLI registers it right after spawning). */
+/**
+ * The new session once the server lists it (the CLI registers it right after spawning).
+ * The socket's new-session push usually lands with the spawn's answer, so the
+ * server is only asked once that is late.
+ */
 async function waitForSession(id) {
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 6 && socket?.connected; i++) {
+        if (state.sessions.has(id)) return state.sessions.get(id);
+        await pause(50);
+    }
     for (let i = 0; i < 20; i++) {
+        if (state.sessions.has(id)) return state.sessions.get(id);
         await syncSessions().catch((e) => console.error(e));
-        const s = state.sessions.get(id);
-        if (s) return s;
-        await new Promise((r) => setTimeout(r, 500));
+        if (state.sessions.has(id)) return state.sessions.get(id);
+        await pause(500);
     }
     return null;
 }
@@ -2982,7 +2991,8 @@ async function submitNewSession(e) {
     try {
         if (worktree === WT_NEW) {
             button.textContent = '正在建 worktree';
-            made = await createWorktree(directory, (command, cwd) => machineBash(m, command, cwd));
+            made = await createWorktree(directory, (command, cwd) => machineBash(m, command, cwd), Math.random,
+                { windows: m.meta.platform === 'win32' });
             directory = made.path;
             newSession.worktreesFor = null; // the list has one more now
             button.textContent = '正在启动';
@@ -2995,7 +3005,11 @@ async function submitNewSession(e) {
             if (!confirm(`${r.directory} 不存在，要在这台电脑上创建它吗？`)) return;
             r = await machineRpc(m, 'spawn-happy-session', { ...params, approvedNewDirectoryCreation: true });
         }
-        if (r?.type === 'error') throw new Error(r.errorMessage || r.message || '启动失败');
+        if (r?.type === 'error') {
+            const why = r.errorMessage || r.message || '启动失败';
+            // The daemon gives a new CLI 15s to register; a stalled request to the server is the usual cause.
+            throw new Error(/webhook timeout/i.test(why) ? '电脑上的 happy 15 秒内没有启动好（通常是它连服务器卡住了），再试一次' : why);
+        }
         if (r?.type !== 'success' || !r.sessionId) throw new Error('电脑返回了无法识别的结果');
         button.textContent = '正在打开';
         const s = await waitForSession(r.sessionId);

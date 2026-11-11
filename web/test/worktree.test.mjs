@@ -49,6 +49,37 @@ test('a taken name gets -2; started from inside a worktree it still lands in the
     assert.deepEqual(made, { path: `${repo}/.dev/worktree/clever-ocean-2`, branch: 'clever-ocean-2' });
 });
 
+test('one bash call per worktree (each is a round trip to the daemon), under bash as sh too (macOS)', async () => {
+    const calls = [];
+    const asBash = (command, cwd) => new Promise((resolve) => {
+        calls.push(command);
+        exec(command, { cwd, shell: 'bash' }, (error, stdout, stderr) => resolve({ success: !error, stdout, stderr, exitCode: error ? error.code ?? 1 : 0 }));
+    });
+    const made = await createWorktree(join(repo, 'sub'), asBash, fixed(0.99));
+    assert.deepEqual(made, { path: `${repo}/.dev/worktree/fresh-desert`, branch: 'fresh-desert' });
+    assert.equal(calls.length, 1);
+});
+
+test('all four names taken, or git failing otherwise: git says why', async () => {
+    for (const b of ['bold-mountain-2', 'bold-mountain-3', 'bold-mountain-4']) await bash(`git branch ${b}`, repo);
+    assert.equal((await createWorktree(repo, bash, fixed(0.34))).branch, 'bold-mountain');
+    await assert.rejects(createWorktree(repo, bash, fixed(0.34)), /already exists/);
+    const broken = async (command, cwd) => bash(command.replace('git worktree add', 'git worktree add --no-such-flag'), cwd);
+    await assert.rejects(createWorktree(repo, broken, fixed(0.8)), /no-such-flag|unknown option/);
+});
+
+test('a Windows daemon (cmd.exe) gets one plain git command per step', async () => {
+    const calls = [];
+    const logged = (command, cwd) => { calls.push(command); return bash(command, cwd); };
+    const made = await createWorktree(join(repo, 'sub'), logged, fixed(0.99), { windows: true });
+    assert.deepEqual(made, { path: `${repo}/.dev/worktree/fresh-desert-2`, branch: 'fresh-desert-2' });
+    assert.deepEqual(calls, ['git rev-parse --show-toplevel', 'git worktree add -b fresh-desert .dev/worktree/fresh-desert',
+        'git worktree add -b fresh-desert-2 .dev/worktree/fresh-desert-2']);
+    const plain = join(root, 'plain-win');
+    mkdirSync(plain);
+    await assert.rejects(createWorktree(plain, bash, Math.random, { windows: true }), { message: '这个目录不是 git 仓库' });
+});
+
 test('not a git repository: null list, a plain error on create', async () => {
     const plain = join(root, 'plain');
     mkdirSync(plain);
