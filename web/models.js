@@ -159,7 +159,16 @@ export const DEFAULT_AGENTS = [
     { id: 'cursor', name: 'Cursor' },
 ];
 
-/** [{ key, name, model }] an agent's hardcoded catalog (the same lists the composer falls back to). */
+/** Cursor settings use the current catalog, then the newest live catalog, then a past session's. */
+export function cursorModelSession(sessions, current) {
+    const hasCatalog = (s) => s?.meta?.flavor === 'cursor' && !isRig(s.meta) && modelOptions(s.meta).length > 0;
+    if (hasCatalog(current)) return current;
+    const live = (s) => s.active && s.meta.lifecycleState !== 'archived';
+    return [...sessions].filter(hasCatalog)
+        .sort((a, b) => Number(live(b)) - Number(live(a)) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0] ?? null;
+}
+
+/** [{ key, name, model }] an agent's reported catalog, or its composer fallback. */
 export function agentModelOptions(agent, meta) {
     if (meta) return modelOptions({ ...meta, flavor: agent });
     return withCodexConfig(agent, (HARDCODED[agent] ?? []).map(([key, name]) => ({ key, name, model: key })));

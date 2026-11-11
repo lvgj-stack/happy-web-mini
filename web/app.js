@@ -3,7 +3,7 @@ import {
     openAnonymous, parseSecretKey, unb64, unwrapDataKey, uuid,
 } from './crypto.js';
 import { io } from './node_modules/socket.io-client/dist/socket.io.esm.min.js';
-import { DEFAULT_AGENTS, agentModelOptions, currentEffort, currentModelKey, effortName, effortOptions, isRig, modelMeta, modelOptions } from './models.js';
+import { DEFAULT_AGENTS, agentModelOptions, currentEffort, currentModelKey, cursorModelSession, effortName, effortOptions, isRig, modelMeta, modelOptions } from './models.js';
 import { defaultsFor, loadDefaults, saveDefault } from './defaults.js';
 import { codexModelLoader } from './codexModels.js';
 import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
@@ -222,6 +222,7 @@ async function syncSessions() {
     renderHead();
     renderAsk();
     renderUsage();
+    if (document.body.classList.contains('in-settings')) renderSettings();
 }
 
 const isArchived = (s) => s.meta.lifecycleState === 'archived';
@@ -2389,7 +2390,9 @@ function renderSettings() {
     for (const agent of DEFAULT_AGENTS) {
         const d = defaults[agent.id] ?? {};
         const codexSession = agent.id === 'codex' && settingsCodexSession();
-        const meta = codexSession ? modelMetadata(codexSession) : { flavor: agent.id };
+        const cursorSession = agent.id === 'cursor' && cursorModelSession(state.sessions.values(), state.current);
+        const meta = codexSession ? modelMetadata(codexSession) : cursorSession ? cursorSession.meta : { flavor: agent.id };
+        const models = agentModelOptions(agent.id, meta);
         const rowEl = el('div', 'default-row');
         rowEl.append(el('div', 'agent-name', agent.name));
 
@@ -2398,11 +2401,17 @@ function renderSettings() {
         const none = el('option', null, '不指定');
         none.value = '';
         model.append(none);
-        for (const o of agentModelOptions(agent.id, meta)) {
+        for (const o of models) {
             const opt = el('option', null, o.name);
             opt.value = o.key;
             opt.title = o.description || '';
             model.append(opt);
+        }
+        if (agent.id === 'cursor' && d.model && !models.some((o) => o.key === d.model)) {
+            const saved = el('option', null, `${d.model}（已保存，当前列表不可用）`);
+            saved.value = d.model;
+            saved.disabled = true;
+            model.append(saved);
         }
         model.value = d.model ?? '';
         model.onchange = () => { saveDefault(agent.id, 'model', model.value, meta); settingsSaved(); };
@@ -2412,6 +2421,11 @@ function renderSettings() {
             if (catalog?.error && catalog.catalog) model.title += '\n刷新失败，显示上次查询的列表';
             model.onfocus = () => refreshCodexModels(codexSession);
             model.onpointerdown = model.onfocus;
+        }
+        if (agent.id === 'cursor') {
+            model.disabled = models.length === 0 && !d.model;
+            model.title = cursorSession ? `Cursor 模型来自 ${cursorSession.meta.host || '这台电脑'} · ${cursorSession.meta.path || ''}`
+                : '启动一个 Cursor 会话后，就能选择它提供的模型';
         }
 
         const levels = effortOptions(meta, d.model ?? '');
@@ -2444,9 +2458,10 @@ function renderSettings() {
         permission.onchange = () => { saveDefault(agent.id, 'permission', permission.value); settingsSaved(); };
 
         const fields = el('div', 'default-fields');
-        if (model.options.length > 1) fields.append(labelled('模型', model));
+        if (model.options.length > 1 || agent.id === 'cursor') fields.append(labelled('模型', model));
         if (levels.length) fields.append(labelled('强度', effort));
         if (modes.length) fields.append(labelled('权限', permission));
+        if (agent.id === 'cursor' && models.length === 0) fields.append(el('p', 'hint', '启动一个 Cursor 会话后，就能选择它提供的模型。'));
         rowEl.append(fields);
         box.append(rowEl);
     }
@@ -2533,11 +2548,13 @@ async function onUpdate(body) {
         }
         renderList();
         if (s === state.current) { renderHead(); renderModelPicker(); renderThinking(); renderAsk(); }
+        if (s.meta.flavor === 'cursor' && document.body.classList.contains('in-settings')) renderSettings();
         return;
     }
     if (body.t === 'new-session') {
         await ingest(body);
         renderList();
+        if (document.body.classList.contains('in-settings')) renderSettings();
     }
 }
 

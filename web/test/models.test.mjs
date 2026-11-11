@@ -1,8 +1,8 @@
 // node --test: model options and how a choice goes on the wire.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CODEX_CONFIG, agentModelOptions, currentModelKey, effortOptions, modelMeta, modelOptions } from '../models.js';
-import { defaultsFor, saveDefault } from '../defaults.js';
+import { CODEX_CONFIG, agentModelOptions, currentModelKey, cursorModelSession, effortOptions, modelMeta, modelOptions } from '../models.js';
+import { defaultsFor, loadDefaults, saveDefault } from '../defaults.js';
 
 test('Codex offers 跟随 Codex 配置 first, which sends model: null', () => {
     const [first, second] = modelOptions({ flavor: 'codex' });
@@ -34,6 +34,56 @@ test('Cursor offers the models its session reports, and no effort', () => {
     assert.equal(currentModelKey(meta), 'gpt-5');
     assert.deepEqual(modelOptions({ flavor: 'cursor' }), []);
     assert.deepEqual(effortOptions(meta, 'gpt-5'), []);
+    assert.deepEqual(agentModelOptions('cursor', meta), modelOptions(meta));
+});
+
+const cursorSession = (updatedAt, overrides = {}) => ({
+    active: true, updatedAt,
+    meta: { flavor: 'cursor', models: [{ code: 'sonnet', value: 'Sonnet' }] },
+    ...overrides,
+});
+
+test('Cursor settings prefer the current catalog, then the newest live one', () => {
+    const older = cursorSession(1);
+    const newer = cursorSession(2);
+    const offline = cursorSession(3, { active: false });
+    const archived = cursorSession(4, { meta: { ...older.meta, lifecycleState: 'archived' } });
+    const sessions = [older, offline, archived, newer];
+    assert.equal(cursorModelSession(sessions, older), older);
+    assert.equal(cursorModelSession(sessions, { meta: { flavor: 'claude' } }), newer);
+    assert.equal(cursorModelSession(sessions, { meta: { flavor: 'cursor', models: [] } }), newer);
+    assert.equal(cursorModelSession([offline, archived]), archived);
+});
+
+test('Cursor settings ignore missing catalogs and Happy Agent catalogs', () => {
+    const empty = cursorSession(4, { meta: { flavor: 'cursor', models: [{ value: 'Missing code' }] } });
+    const rig = cursorSession(3, { meta: { flavor: 'cursor', client: { id: 'rig' }, models: [{ id: 'sonnet', providerId: 'p' }] } });
+    const other = cursorSession(2, { meta: { flavor: 'claude', models: [{ code: 'opus' }] } });
+    const usable = cursorSession(1);
+    assert.equal(cursorModelSession([empty, rig, other]), null);
+    assert.equal(cursorModelSession([empty, rig, other, usable], rig), usable);
+});
+
+test('a Cursor default persists, sends the reported model code, and applies only to supporting sessions', () => {
+    const values = new Map();
+    const previous = globalThis.localStorage;
+    globalThis.localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+    try {
+        const meta = cursorSession(1).meta;
+        const option = agentModelOptions('cursor', meta)[0];
+        saveDefault('cursor', 'model', option.key, meta);
+        assert.equal(loadDefaults().cursor.model, 'sonnet');
+        assert.deepEqual(defaultsFor(meta), { modelKey: 'sonnet', effort: null, permission: null });
+        assert.deepEqual(modelMeta(modelOptions(meta).find((o) => o.key === defaultsFor(meta).modelKey)), { model: 'sonnet' });
+        assert.equal(defaultsFor({ flavor: 'cursor', models: [{ code: 'other' }] }).modelKey, null);
+        assert.equal(defaultsFor({ flavor: 'cursor' }).modelKey, null);
+        assert.equal(defaultsFor({ ...meta, client: { id: 'rig' } }).modelKey, null);
+        saveDefault('cursor', 'model', '', meta);
+        assert.equal(defaultsFor(meta).modelKey, null);
+        assert.equal(loadDefaults().cursor.model, undefined);
+    } finally {
+        if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
+    }
 });
 
 const ferry = {

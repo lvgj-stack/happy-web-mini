@@ -7,7 +7,7 @@ import { permissionOptions } from './permissions.js';
 
 const KEY = 'happy.defaults';
 
-/** { claude: { model?, effort?, permission? }, codex: {...}, gemini: {...} } */
+/** { claude: { model?, effort?, permission? }, codex: {...}, gemini: {...}, cursor: {...} } */
 export function loadDefaults() {
     try {
         return JSON.parse(localStorage.getItem(KEY) || '{}') ?? {};
