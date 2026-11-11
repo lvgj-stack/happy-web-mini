@@ -1,6 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="14" fill="#56735C"/>
-  <circle cx="23" cy="26" r="4" fill="#FCFCFA"/>
-  <circle cx="41" cy="26" r="4" fill="#FCFCFA"/>
-  <path d="M19 37q13 13 26 0" fill="none" stroke="#FCFCFA" stroke-width="5" stroke-linecap="round"/>
+  <!-- Tuxedo cat: black head and ears -->
+  <path d="M11 33 L13 8 L28 19 Q32 18 36 19 L51 8 L53 33 Q54 56 32 56 Q10 56 11 33Z" fill="#1F2320"/>
+  <path d="M16 15 L17 23 L23 19Z M48 15 L47 23 L41 19Z" fill="#E7A7A3"/>
+  <!-- White blaze down the nose, muzzle and chin -->
+  <path d="M32 21 Q29.5 32 25 41 Q20 47 24 52 Q28 56 32 56 Q36 56 40 52 Q44 47 39 41 Q34.5 32 32 21Z" fill="#FCFCFA"/>
+  <!-- Eyes -->
+  <ellipse cx="21.5" cy="34" rx="5" ry="5.5" fill="#D6E36B"/>
+  <ellipse cx="42.5" cy="34" rx="5" ry="5.5" fill="#D6E36B"/>
+  <ellipse cx="21.5" cy="34" rx="1.8" ry="4.2" fill="#1F2320"/>
+  <ellipse cx="42.5" cy="34" rx="1.8" ry="4.2" fill="#1F2320"/>
+  <!-- Nose and mouth -->
+  <path d="M29 42.5 L35 42.5 L32 46Z" fill="#E7A7A3"/>
+  <path d="M32 46 Q32 49 28.5 49 M32 46 Q32 49 35.5 49" fill="none" stroke="#1F2320" stroke-width="1.4" stroke-linecap="round"/>
 </svg>
