@@ -1,7 +1,7 @@
 // node --test: model options and how a choice goes on the wire.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CODEX_CONFIG, agentModelOptions, currentModelKey, cursorModelSession, effortOptions, modelMeta, modelOptions } from '../models.js';
+import { CODEX_CONFIG, agentModelOptions, currentEffort, currentModelKey, cursorModelSession, effortOptions, modelMeta, modelOptions } from '../models.js';
 import { defaultsFor, loadDefaults, saveDefault } from '../defaults.js';
 
 test('Codex offers 跟随 Codex 配置 first, which sends model: null', () => {
@@ -28,12 +28,19 @@ test('a normal choice still sends its model', () => {
     assert.deepEqual(modelMeta(null), {});
 });
 
-test('Cursor offers the models its session reports, and no effort', () => {
-    const meta = { flavor: 'cursor', models: [{ code: 'default', value: 'Auto' }, { code: 'gpt-5', value: 'GPT-5' }], currentModelCode: 'gpt-5' };
+test('Cursor offers the models and thought levels its session reports', () => {
+    const meta = {
+        flavor: 'cursor',
+        models: [{ code: 'default', value: 'Auto' }, { code: 'gpt-5', value: 'GPT-5' }],
+        currentModelCode: 'gpt-5',
+        thoughtLevels: [{ code: 'mid', value: 'Mid' }, { code: 'high', value: 'High' }],
+        currentThoughtLevelCode: 'mid',
+    };
     assert.deepEqual(modelOptions(meta).map((o) => o.key), ['default', 'gpt-5']);
     assert.equal(currentModelKey(meta), 'gpt-5');
     assert.deepEqual(modelOptions({ flavor: 'cursor' }), []);
-    assert.deepEqual(effortOptions(meta, 'gpt-5'), []);
+    assert.deepEqual(effortOptions(meta, 'gpt-5'), ['mid', 'high']);
+    assert.equal(currentEffort(meta), 'mid');
     assert.deepEqual(agentModelOptions('cursor', meta), modelOptions(meta));
 });
 

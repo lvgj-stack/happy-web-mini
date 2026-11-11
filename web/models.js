@@ -137,6 +137,7 @@ export function effortOptions(meta, modelKey) {
             }
             return CODEX_EFFORT[key] ?? ['low', 'medium', 'high', 'xhigh'];
         }
+        case 'cursor': return (meta.thoughtLevels ?? []).map((t) => t?.code).filter(Boolean);
         case 'agy': return modelKey === 'Gemini 3.8 Flash' ? ['low', 'medium', 'high'] : [];
         default: return [];
     }
@@ -148,7 +149,7 @@ export function currentEffort(meta) {
         const mode = meta.draft ?? meta.lastMode;
         return nonEmpty(mode?.effort, meta.reasoning?.current, meta.currentThoughtLevelCode) ?? null;
     }
-    return nonEmpty(meta?.effortLevel, meta?.effort) ?? null;
+    return nonEmpty(meta?.currentThoughtLevelCode, meta?.effortLevel, meta?.effort) ?? null;
 }
 
 /** The agents the settings page offers defaults for, with their model lists. */
