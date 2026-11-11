@@ -30,6 +30,11 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
   点后变成对勾 1.5 秒。https / localhost / Mac 应用里用 Clipboard API，http 下退回 `execCommand('copy')`；触屏设备上按钮常驻
 - 换模型和思考强度：输入框下方选择，记在本机（按会话），随消息放进 `meta.model` / `meta.effort`
   （Happy Agent 会话再带 `modelProviderId`）；强度档位随模型变化
+- Codex 模型从会话所在电脑的 `codex app-server` 查询，名称、顺序和强度档位跟 Codex CLI 的模型菜单一致，
+  包括自定义 provider 的模型（例如 Ferry、Max 1M 和排队标记）；悬停模型可看 CLI 的描述。
+  打开在线 Codex 会话、设置页或模型菜单时查询，每个会话缓存 1 分钟；设置页使用当前 Codex 会话，
+  当前不是 Codex 时使用最近的在线 Codex 会话。查询失败保留上次结果，没有结果时使用备用列表，悬停菜单可看来源状态。
+  通过 Happy 已有的 `bash` RPC 查询，无需升级 Happy CLI；只读取配置和模型列表，不创建对话
 - 权限模式：输入框下方第三个下拉（设置页也能给每个 agent 设默认），随消息放进 `meta.permissionMode`，不选就不带、由 Happy CLI 决定。
   Claude：默认 / 自动接受编辑（`acceptEdits`）/ 计划模式（`plan`）/ YOLO（`bypassPermissions`）；Codex：自动（`auto`，CLI 的默认）/ 谨慎（`default`）/
   只读（`read-only`）/ 工作区放行（`safe-yolo`）/ YOLO（`yolo`）；Gemini：默认 / 只读 / 工作区放行 / YOLO。Happy Agent 会话不显示。
@@ -109,7 +114,8 @@ http 下也能用（加解密是纯 JS 实现），但页面可能被中间人�
 
 - `crypto.js` — 密钥派生 / 数据密钥解包 / AES-GCM / 备份密钥解析，对照 happy-ios 的 crypto 测试向量验证过
 - `app.js` — 登录、会话列表、消息收发、实时推送、归档
-- `models.js` — 每种 agent 可选的模型，对照 iOS 的 ModelModeOptions / AgentDefaults
+- `models.js` — 每种 agent 可选的模型和强度，Codex 优先使用 CLI 的实际列表，其余对照 iOS 的 ModelModeOptions / AgentDefaults
+- `codexModels.js` — 经会话的 `bash` RPC 查询 Codex 配置和完整模型列表，按会话缓存、失败后重试
 - `markdown.js` — Markdown 渲染、代码高亮和 HTML 过滤
 - `questions.js` — 找出待回答的问题、组装回答和拒绝的 RPC，对照 iOS 的 AgentCommunications
 - `usage.js` — 订阅用量窗口的排序、文案和提示，对照 iOS 的 SessionComposerRules.usageLimitRows

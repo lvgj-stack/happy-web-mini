@@ -1,8 +1,8 @@
 // Which models a session can switch to, and how a choice goes on the wire.
 // Mirrors packages/happy-ios/Sources/HappyCore/Composer/ModelModeOptions.swift,
 // RigCatalog.swift and Settings/AgentDefaults.swift (hardcodedModels).
-// Cursor has no fixed list: its sessions report the models cursor-agent
-// offers (meta.models), and the composer offers those.
+// Codex uses its app-server catalog when available, retaining this fallback
+// for offline sessions. Cursor reports its own catalog in meta.models.
 
 const HARDCODED = {
     claude: [
@@ -59,12 +59,29 @@ export function modelOptions(meta) {
             return { key: `${providerId}:${id}`, name: `${nonEmpty(m.name, m.value) ?? id}（${providerName}）`, model: id, providerId };
         }).filter(Boolean);
     }
+    const flavor = meta?.flavor || 'claude';
+    if (flavor === 'codex' && Array.isArray(meta?.codexModels)) {
+        return withCodexConfig(flavor, codexOptions(meta.codexModels));
+    }
+    if (flavor === 'codex' && meta?.models?.some((m) => m?.model || m?.displayName)) {
+        return withCodexConfig(flavor, codexOptions(meta.models));
+    }
     const fromCli = (meta?.models ?? [])
         .filter((m) => typeof m?.code === 'string')
         .map((m) => ({ key: m.code, name: m.value || m.code, model: m.code }));
-    const flavor = meta?.flavor || 'claude';
     if (fromCli.length) return withCodexConfig(flavor, fromCli);
     return withCodexConfig(flavor, (HARDCODED[flavor] ?? []).map(([key, name]) => ({ key, name, model: key })));
+}
+
+/** Codex's wire model slug is distinct from its display/preset id. */
+function codexOptions(models) {
+    const seen = new Set();
+    return models.map((m) => {
+        const model = nonEmpty(m?.model, m?.code, m?.id);
+        if (!model || m.hidden || seen.has(model)) return null;
+        seen.add(model);
+        return { key: model, name: nonEmpty(m.displayName, m.value, m.name) ?? model, model, description: m.description ?? '' };
+    }).filter(Boolean);
 }
 
 /** The model the session reports it is on, as an option key, if any. */
@@ -112,7 +129,14 @@ export function effortOptions(meta, modelKey) {
     }
     switch (meta?.flavor || 'claude') {
         case 'claude': return CLAUDE_EFFORT;
-        case 'codex': return CODEX_EFFORT[modelKey] ?? ['low', 'medium', 'high', 'xhigh'];
+        case 'codex': {
+            const key = modelKey === CODEX_CONFIG ? meta.codexConfiguredModel : modelKey;
+            const model = (meta.codexModels ?? meta.models ?? []).find((m) => nonEmpty(m?.model, m?.code, m?.id) === key);
+            if (Array.isArray(model?.supportedReasoningEfforts)) {
+                return [...new Set(model.supportedReasoningEfforts.map((e) => nonEmpty(e?.reasoningEffort, e)).filter(Boolean))];
+            }
+            return CODEX_EFFORT[key] ?? ['low', 'medium', 'high', 'xhigh'];
+        }
         case 'agy': return modelKey === 'Gemini 3.8 Flash' ? ['low', 'medium', 'high'] : [];
         default: return [];
     }
@@ -136,6 +160,7 @@ export const DEFAULT_AGENTS = [
 ];
 
 /** [{ key, name, model }] an agent's hardcoded catalog (the same lists the composer falls back to). */
-export function agentModelOptions(agent) {
+export function agentModelOptions(agent, meta) {
+    if (meta) return modelOptions({ ...meta, flavor: agent });
     return withCodexConfig(agent, (HARDCODED[agent] ?? []).map(([key, name]) => ({ key, name, model: key })));
 }

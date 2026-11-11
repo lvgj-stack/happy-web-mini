@@ -16,12 +16,12 @@ export function loadDefaults() {
     }
 }
 
-export function saveDefault(agent, field, value) {
+export function saveDefault(agent, field, value, meta = { flavor: agent }) {
     const all = loadDefaults();
     const entry = { ...(all[agent] ?? {}) };
     if (value) entry[field] = value; else delete entry[field];
     // An effort the new model does not take is dropped with it.
-    if (field === 'model' && entry.effort && !effortOptions({ flavor: agent }, entry.model ?? '').includes(entry.effort)) {
+    if (field === 'model' && entry.effort && !effortOptions(meta, entry.model ?? '').includes(entry.effort)) {
         delete entry.effort;
     }
     all[agent] = entry;

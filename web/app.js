@@ -5,6 +5,7 @@ import {
 import { io } from './node_modules/socket.io-client/dist/socket.io.esm.min.js';
 import { DEFAULT_AGENTS, agentModelOptions, currentEffort, currentModelKey, effortName, effortOptions, isRig, modelMeta, modelOptions } from './models.js';
 import { defaultsFor, loadDefaults, saveDefault } from './defaults.js';
+import { codexModelLoader } from './codexModels.js';
 import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
 import { splitOptions } from './options.js';
 import { addCopyButtons, copyText, handleCopyClicks } from './clipboard.js';
@@ -37,6 +38,7 @@ const $ = (id) => document.getElementById(id);
 const DEFAULT_SERVER = 'https://api.cluster-fluster.com';
 const WORKTREE_MARKER = '/.dev/worktree/';
 const ARCHIVED_PAGE = 30;
+const codexModels = codexModelLoader();
 
 const state = {
     server: localStorage.getItem('happy.server') || DEFAULT_SERVER,
@@ -157,6 +159,7 @@ async function loginWithQR() {
 }
 
 function logout() {
+    codexModels.clear();
     localStorage.removeItem('happy.secret');
     localStorage.removeItem('happy.token');
     // Decrypted links stay with the account, not on a shared machine.
@@ -979,6 +982,7 @@ async function openSession(s) {
     }
     renderHead();
     renderModelPicker();
+    refreshCodexModels(s);
     renderAsk();
     renderTray();
     hideSlash();
@@ -1713,20 +1717,48 @@ function chosenEffort(s) {
 
 /** The model the next message runs on: picked here, else the settings default, else the session's own. */
 function effectiveModelKey(s) {
-    return chosenModelKey(s) || defaultsFor(s.meta).modelKey || currentModelKey(s.meta);
+    const meta = modelMetadata(s);
+    return chosenModelKey(s) || defaultsFor(meta).modelKey || currentModelKey(meta);
+}
+
+/** Locally queried models never overwrite the server's encrypted session metadata. */
+function modelMetadata(s) {
+    const catalog = codexModels.get(s.id)?.catalog;
+    return catalog ? { ...s.meta, codexModels: catalog.models, codexConfiguredModel: catalog.configuredModel } : s.meta;
+}
+
+async function refreshCodexModels(s) {
+    if (!s || s.meta.flavor !== 'codex' || isRig(s.meta) || !s.active || isArchived(s)) return;
+    const before = codexModels.get(s.id);
+    const previousCatalog = before?.catalog;
+    const previousError = before?.error;
+    await codexModels.load(s.id, (command) => sessionRpc(s, 'bash', { command, cwd: s.meta.path, timeout: 12000 }));
+    if (!state.sessions.has(s.id)) return;
+    const after = codexModels.get(s.id);
+    if (after?.catalog === previousCatalog && after?.error === previousError) return;
+    if (state.current === s) renderModelPicker();
+    if (document.body.classList.contains('in-settings')) renderSettings();
+}
+
+/** Settings use the current Codex computer/project, or the most recent online Codex session. */
+function settingsCodexSession() {
+    if (state.current?.meta.flavor === 'codex' && !isRig(state.current.meta)) return state.current;
+    return [...state.sessions.values()].filter((s) => s.meta.flavor === 'codex' && !isRig(s.meta) && s.active && !isArchived(s))
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
 function renderModelPicker() {
     const s = state.current;
     const picker = $('model');
     if (!s) { picker.hidden = true; $('effort').hidden = true; $('permission').hidden = true; return; }
-    const options = modelOptions(s.meta);
+    const meta = modelMetadata(s);
+    const options = modelOptions(meta);
     const chosen = chosenModelKey(s);
-    const current = currentModelKey(s.meta);
+    const current = currentModelKey(meta);
     const known = new Set(options.map((o) => o.key));
     picker.replaceChildren();
     const currentName = options.find((o) => o.key === current)?.name ?? current;
-    const fallback = defaultsFor(s.meta).modelKey;
+    const fallback = defaultsFor(meta).modelKey;
     const fallbackName = fallback && options.find((o) => o.key === fallback)?.name;
     const first = el('option', null, fallbackName ? `默认：${fallbackName}` : currentName ? `当前模型：${currentName}` : '当前模型');
     first.value = '';
@@ -1734,10 +1766,16 @@ function renderModelPicker() {
     for (const o of options) {
         const opt = el('option', null, o.key === current ? `${o.name}（当前）` : o.name);
         opt.value = o.key;
+        opt.title = o.description || '';
         picker.append(opt);
     }
     picker.value = chosen && known.has(chosen) ? chosen : '';
     picker.hidden = options.length === 0;
+    const catalog = codexModels.get(s.id);
+    picker.title = s.meta.flavor !== 'codex' || isRig(s.meta) ? ''
+        : catalog?.error ? (catalog.catalog ? '刷新模型失败，显示上次从 Codex CLI 查询的列表' : '未能查询 Codex CLI，显示备用模型列表')
+        : catalog?.pending ? '正在查询这台电脑的 Codex CLI 模型'
+        : catalog?.catalog ? '来自这台电脑的 Codex CLI；重新打开列表时自动刷新' : 'Codex 备用模型列表';
     renderEffortPicker();
     renderPermissionPicker();
     renderUsage();
@@ -1782,7 +1820,7 @@ function setChosenPermission(s, mode) {
 
 /** The permission mode messages go out with: picked here, else the agent's default, else none (the CLI keeps its own). */
 function effectivePermission(s) {
-    const mode = chosenPermission(s) || defaultsFor(s.meta).permission;
+    const mode = chosenPermission(s) || defaultsFor(modelMetadata(s)).permission;
     return mode && permissionOptions(s.meta).some((o) => o.key === mode) ? mode : null;
 }
 
@@ -1790,7 +1828,7 @@ function renderPermissionPicker() {
     const s = state.current;
     const picker = $('permission');
     const options = s ? permissionOptions(s.meta) : [];
-    const fallback = s ? defaultsFor(s.meta).permission : null;
+    const fallback = s ? defaultsFor(modelMetadata(s)).permission : null;
     const fallbackName = fallback && options.find((o) => o.key === fallback)?.name;
     picker.replaceChildren();
     const first = el('option', null, fallbackName ? `默认：${fallbackName}` : '默认权限');
@@ -1811,9 +1849,10 @@ function renderPermissionPicker() {
 function renderEffortPicker() {
     const s = state.current;
     const picker = $('effort');
-    const levels = s ? effortOptions(s.meta, effectiveModelKey(s)) : [];
+    const meta = s && modelMetadata(s);
+    const levels = s ? effortOptions(meta, effectiveModelKey(s)) : [];
     const current = s ? currentEffort(s.meta) : null;
-    const fallback = s ? defaultsFor(s.meta, effectiveModelKey(s)).effort : null;
+    const fallback = s ? defaultsFor(meta, effectiveModelKey(s)).effort : null;
     picker.replaceChildren();
     const first = el('option', null, fallback ? `默认：${effortName(fallback)}` : current ? `当前强度：${effortName(current)}` : '默认强度');
     first.value = '';
@@ -1830,11 +1869,12 @@ function renderEffortPicker() {
 
 /** Model and effort fields for the next message: what was picked here, else the settings defaults. */
 function chosenModeMeta(s) {
-    const key = chosenModelKey(s) || defaultsFor(s.meta).modelKey;
-    const meta = modelMeta(key ? modelOptions(s.meta).find((o) => o.key === key) : null);
-    const effort = chosenEffort(s) || defaultsFor(s.meta, effectiveModelKey(s)).effort;
+    const metadata = modelMetadata(s);
+    const key = chosenModelKey(s) || defaultsFor(metadata).modelKey;
+    const meta = modelMeta(key ? modelOptions(metadata).find((o) => o.key === key) : null);
+    const effort = chosenEffort(s) || defaultsFor(metadata, effectiveModelKey(s)).effort;
     // A level the (newly chosen) model does not take is left out, not sent.
-    if (effort && effortOptions(s.meta, effectiveModelKey(s)).includes(effort)) meta.effort = effort;
+    if (effort && effortOptions(metadata, effectiveModelKey(s)).includes(effort)) meta.effort = effort;
     // 跟随 Codex 配置 with no level picked: clear Happy's default effort too, so config.toml's applies.
     else if (meta.model === null) meta.effort = null;
     const permission = effectivePermission(s);
@@ -2320,6 +2360,7 @@ async function pickWallpaperFile(file) {
 function openSettings() {
     document.body.classList.add('in-settings', 'in-chat');
     renderSettings();
+    refreshCodexModels(settingsCodexSession());
 }
 
 /** 设置 › 关于: which build of the page this is (see version.js). */
@@ -2347,6 +2388,8 @@ function renderSettings() {
     box.replaceChildren();
     for (const agent of DEFAULT_AGENTS) {
         const d = defaults[agent.id] ?? {};
+        const codexSession = agent.id === 'codex' && settingsCodexSession();
+        const meta = codexSession ? modelMetadata(codexSession) : { flavor: agent.id };
         const rowEl = el('div', 'default-row');
         rowEl.append(el('div', 'agent-name', agent.name));
 
@@ -2355,15 +2398,23 @@ function renderSettings() {
         const none = el('option', null, '不指定');
         none.value = '';
         model.append(none);
-        for (const o of agentModelOptions(agent.id)) {
+        for (const o of agentModelOptions(agent.id, meta)) {
             const opt = el('option', null, o.name);
             opt.value = o.key;
+            opt.title = o.description || '';
             model.append(opt);
         }
         model.value = d.model ?? '';
-        model.onchange = () => { saveDefault(agent.id, 'model', model.value); settingsSaved(); };
+        model.onchange = () => { saveDefault(agent.id, 'model', model.value, meta); settingsSaved(); };
+        if (codexSession) {
+            const catalog = codexModels.get(codexSession.id);
+            model.title = `${catalog?.catalog ? 'Codex 模型来自' : '备用模型列表；尚未取得 Codex 模型'} ${codexSession.meta.host || '这台电脑'} · ${codexSession.meta.path || ''}`;
+            if (catalog?.error && catalog.catalog) model.title += '\n刷新失败，显示上次查询的列表';
+            model.onfocus = () => refreshCodexModels(codexSession);
+            model.onpointerdown = model.onfocus;
+        }
 
-        const levels = effortOptions({ flavor: agent.id }, d.model ?? '');
+        const levels = effortOptions(meta, d.model ?? '');
         const effort = el('select', 'field');
         effort.setAttribute('aria-label', `${agent.name} 默认强度`);
         const noneEffort = el('option', null, '不指定');
@@ -3245,6 +3296,8 @@ $('composer').addEventListener('drop', (e) => {
     e.preventDefault();
     addImages([...e.dataTransfer.files]);
 });
+$('model').onfocus = () => refreshCodexModels(state.current);
+$('model').onpointerdown = $('model').onfocus;
 $('model').onchange = () => {
     const s = state.current;
     if (!s) return;
