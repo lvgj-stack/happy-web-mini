@@ -464,6 +464,16 @@ function markRead(s) {
     renderList();
 }
 
+const AGENT_TAGS = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', cursor: 'Cursor' };
+
+/** The small tag naming the agent a session runs on (Claude when it doesn't say). */
+function agentTag(s) {
+    const flavor = s.meta.flavor || 'claude';
+    const tag = el('span', 'agent-tag', AGENT_TAGS[flavor] ?? flavor);
+    tag.dataset.agent = flavor;
+    return tag;
+}
+
 function row(s, sub) {
     const r = el('button', 'row');
     r.dataset.id = s.id;
@@ -483,6 +493,7 @@ function row(s, sub) {
     status.children[3].classList.add('st-unread');
     title.append(status, el('span', 'name', sessionTitle(s)));
     if (waitingSets(s).length) title.append(el('em', 'asking', waitingLabel(s)));
+    title.append(agentTag(s));
     r.append(title);
     const parts = [].concat(sub ?? []).filter(Boolean);
     if (parts.length) {

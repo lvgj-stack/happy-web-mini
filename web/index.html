@@ -180,6 +180,13 @@
   .row.busy .status .st-idle, .row.asking .status .st-idle { display: none; }
   .row.busy:not(.asking) .status .st-working { display: block; color: var(--moss); animation: spin 1s linear infinite; }
   .row.asking .status .st-waiting { display: block; color: #B7791F; }
+  /* Which agent the session runs on: a small tag at the row's right end */
+  .row .agent-tag { flex: none; margin-left: auto; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; font-weight: 500; color: var(--muted); background: rgba(38, 42, 39, .06); }
+  .row .asking ~ .agent-tag { margin-left: 0; }
+  .row .agent-tag[data-agent="claude"] { color: #B4532F; background: rgba(193, 95, 60, .1); }
+  .row .agent-tag[data-agent="codex"] { color: #2F6B5A; background: rgba(16, 163, 127, .1); }
+  .row .agent-tag[data-agent="gemini"] { color: #3B63B8; background: rgba(66, 133, 244, .1); }
+  .row .agent-tag[data-agent="cursor"] { color: #3A3D3B; background: rgba(38, 42, 39, .09); }
   .row .sub { display: flex; gap: 10px; color: var(--muted); font-size: 12px; padding-left: 21px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .sub span { overflow: hidden; text-overflow: ellipsis; }
   .empty-list { color: var(--muted); font-size: 13px; padding: 0 12px; }
