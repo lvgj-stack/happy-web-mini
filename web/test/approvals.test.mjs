@@ -29,6 +29,7 @@ test('allow / allow for the session / deny go out as the permission RPC', () => 
 
 test('allow for the session is offered to Codex only', () => {
     assert.equal(canApproveForSession({ flavor: 'codex' }), true);
+    assert.equal(canApproveForSession({ flavor: 'cursor' }), true);
     assert.equal(canApproveForSession({ flavor: 'claude' }), false);
     assert.equal(canApproveForSession({}), false);
 });

@@ -18,7 +18,7 @@ export function resumeAvailability(s, machine) {
     if (isRig(meta) || meta.capabilities?.resume === false) return hidden;
     const no = (reason) => ({ show: true, ok: false, reason });
     if (!filled(meta.machineId)) return no('不知道这个会话在哪台电脑上，无法恢复');
-    if (!filled(meta.claudeSessionId) && !filled(meta.codexThreadId)) return no('这个会话没有 Claude / Codex 会话 id，无法恢复');
+    if (!filled(meta.claudeSessionId) && !filled(meta.codexThreadId) && !filled(meta.cursorSessionId)) return no('这个会话没有 Claude / Codex / Cursor 会话 id，无法恢复');
     if (!machine) return no('找不到这个会话所在的电脑');
     if (!machine.online) return no('这台电脑不在线');
     if (machine.meta?.resumeSupport?.rpcAvailable !== true) return no('这台电脑上的 happy 版本太旧，不支持恢复会话');

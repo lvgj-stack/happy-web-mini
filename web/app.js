@@ -2375,7 +2375,7 @@ function renderSettings() {
         permission.onchange = () => { saveDefault(agent.id, 'permission', permission.value); settingsSaved(); };
 
         const fields = el('div', 'default-fields');
-        fields.append(labelled('模型', model));
+        if (model.options.length > 1) fields.append(labelled('模型', model));
         if (levels.length) fields.append(labelled('强度', effort));
         if (modes.length) fields.append(labelled('权限', permission));
         rowEl.append(fields);
@@ -2760,7 +2760,9 @@ $('list').addEventListener('contextmenu', (e) => {
 
 // ---------- New session ----------
 
-const AGENTS = [['claude', 'Claude Code'], ['codex', 'Codex'], ['gemini', 'Gemini']];
+const AGENTS = [['claude', 'Claude Code'], ['codex', 'Codex'], ['gemini', 'Gemini'], ['cursor', 'Cursor']];
+/** Offered unless the computer says it lacks it; Cursor only when it says it has it (older CLIs do not report it). */
+const agentAvailable = (key, available) => key === 'claude' || (key === 'cursor' ? available?.cursor === true : !available || available[key] !== false);
 const newSession = { machines: [], busy: false, worktrees: null, worktreesFor: null, worktreeTimer: null };
 const WT_NEW = '\u0000new'; // the Worktree select's 「新建 worktree」; '' is none, anything else an existing checkout's path
 
@@ -2810,7 +2812,7 @@ function renderNewForm(clearError = true) {
     const keep = agent.value;
     const available = m?.meta.cliAvailability;
     agent.replaceChildren(...AGENTS
-        .filter(([key]) => !available || available[key] !== false || key === 'claude')
+        .filter(([key]) => agentAvailable(key, available))
         .map(([key, name]) => { const o = el('option', null, name); o.value = key; return o; }));
     agent.value = [...agent.options].some((o) => o.value === keep) ? keep : 'claude';
     $('new-submit').disabled = !m || !m.online || newSession.busy;

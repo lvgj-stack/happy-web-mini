@@ -14,6 +14,7 @@ test('an archived or offline session on an online, capable computer can be resum
     assert.deepEqual(resumeAvailability(session(), machine()), { show: true, ok: true, reason: '' });
     assert.equal(resumeAvailability(session({ lifecycleState: 'running' }), machine()).ok, true, 'offline, not archived');
     assert.equal(resumeAvailability(session({ flavor: 'codex', claudeSessionId: undefined, codexThreadId: 't1' }), machine()).ok, true);
+    assert.equal(resumeAvailability(session({ flavor: 'cursor', claudeSessionId: undefined, cursorSessionId: 'cur1' }), machine()).ok, true);
 });
 
 test('a live session offers nothing', () => {
@@ -27,7 +28,7 @@ test('Happy Agent sessions and ones that refuse resume offer nothing', () => {
 
 test('what stands in the way is said', () => {
     assert.deepEqual(resumeAvailability(session({ machineId: undefined }), machine()), { show: true, ok: false, reason: '不知道这个会话在哪台电脑上，无法恢复' });
-    assert.deepEqual(resumeAvailability(session({ claudeSessionId: '' }), machine()), { show: true, ok: false, reason: '这个会话没有 Claude / Codex 会话 id，无法恢复' });
+    assert.deepEqual(resumeAvailability(session({ claudeSessionId: '' }), machine()), { show: true, ok: false, reason: '这个会话没有 Claude / Codex / Cursor 会话 id，无法恢复' });
     assert.deepEqual(resumeAvailability(session(), null), { show: true, ok: false, reason: '找不到这个会话所在的电脑' });
     assert.deepEqual(resumeAvailability(session(), machine({ online: false })), { show: true, ok: false, reason: '这台电脑不在线' });
     assert.deepEqual(resumeAvailability(session(), machine({ meta: {} })), { show: true, ok: false, reason: '这台电脑上的 happy 版本太旧，不支持恢复会话' });

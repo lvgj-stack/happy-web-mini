@@ -26,8 +26,11 @@ export function approvalCall(set, choice) {
     return { method: 'permission', params: { id: set.id, ...DECISIONS[choice] } };
 }
 
-/** 「本会话都允许」: Codex takes approved_for_session; Claude's handler has no such decision. */
-export const canApproveForSession = (meta) => meta?.flavor === 'codex';
+/**
+ * 「本会话都允许」: Codex takes approved_for_session, and Cursor maps it to the
+ * ACP allow_always option; Claude's handler has no such decision.
+ */
+export const canApproveForSession = (meta) => meta?.flavor === 'codex' || meta?.flavor === 'cursor';
 
 const capped = (text) => (text.length > 4000 ? text.slice(0, 4000) + '\n…' : text);
 

@@ -1,6 +1,7 @@
 // How one tool call reads in the chat: an icon, a one-line summary (the
 // command, the file, the pattern...) and the full detail behind a click.
-// Tool names are Claude's (Bash, Read, Edit...) or Codex's (shell, apply_patch...).
+// Tool names are Claude's (Bash, Read, Edit...), Codex's (shell, apply_patch...)
+// or an ACP tool kind (Cursor: read, edit, delete, move, search, execute, fetch).
 
 // Icons come from Lucide (lucide-static): one SVG string per icon.
 import SquareTerminal from './node_modules/lucide-static/dist/esm/icons/square-terminal.mjs';
@@ -125,7 +126,7 @@ export function describeTool(view, short = (p) => p) {
     if (['read', 'notebookread', 'read_file', 'view'].includes(key)) {
         return path() ? { icon: 'file', text: path(), detail: json() } : { icon: 'file', text: title || name, markdown: !!title, detail: json() };
     }
-    if (['write', 'edit', 'multiedit', 'notebookedit', 'write_file', 'replace', 'str_replace_based_edit_tool'].includes(key)) {
+    if (['write', 'edit', 'multiedit', 'notebookedit', 'write_file', 'replace', 'str_replace_based_edit_tool', 'delete', 'move'].includes(key)) {
         return path() ? { icon: 'edit', text: path(), detail: json() } : { icon: 'edit', text: title || name, markdown: !!title, detail: json() };
     }
     if (key === 'apply_patch') {

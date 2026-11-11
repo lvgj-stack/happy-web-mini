@@ -1,7 +1,7 @@
 // node --test: model options and how a choice goes on the wire.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CODEX_CONFIG, agentModelOptions, modelMeta, modelOptions } from '../models.js';
+import { CODEX_CONFIG, agentModelOptions, currentModelKey, effortOptions, modelMeta, modelOptions } from '../models.js';
 
 test('Codex offers 跟随 Codex 配置 first, which sends model: null', () => {
     const [first, second] = modelOptions({ flavor: 'codex' });
@@ -25,4 +25,12 @@ test('other agents do not get it', () => {
 test('a normal choice still sends its model', () => {
     assert.deepEqual(modelMeta({ key: 'gpt-6-sol', model: 'gpt-6-sol' }), { model: 'gpt-6-sol' });
     assert.deepEqual(modelMeta(null), {});
+});
+
+test('Cursor offers the models its session reports, and no effort', () => {
+    const meta = { flavor: 'cursor', models: [{ code: 'default', value: 'Auto' }, { code: 'gpt-5', value: 'GPT-5' }], currentModelCode: 'gpt-5' };
+    assert.deepEqual(modelOptions(meta).map((o) => o.key), ['default', 'gpt-5']);
+    assert.equal(currentModelKey(meta), 'gpt-5');
+    assert.deepEqual(modelOptions({ flavor: 'cursor' }), []);
+    assert.deepEqual(effortOptions(meta, 'gpt-5'), []);
 });

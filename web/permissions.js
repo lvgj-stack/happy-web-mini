@@ -1,7 +1,8 @@
 // Permission modes a session can run in, sent as `meta.permissionMode` with a
 // message. The keys are what Happy CLI accepts per agent (1.2.6:
 // VALID_PERMISSION_MODES for Claude, CODEX_REMOTE_PERMISSION_MODES for Codex,
-// runGemini's list for Gemini). Happy Agent sessions have their own modes and get none.
+// runGemini's list for Gemini, runAcp's for Cursor: its ACP modes plus a
+// synthesized yolo). Happy Agent sessions have their own modes and get none.
 import { isRig } from './models.js';
 
 const MODES = {
@@ -23,6 +24,12 @@ const MODES = {
         ['read-only', '只读', '只能读文件'],
         ['safe-yolo', '工作区放行', '工作区内不询问'],
         ['yolo', 'YOLO', '全部放行，不再询问'],
+    ],
+    cursor: [
+        ['agent', 'Agent', '可以改文件、跑命令，需要时询问（Cursor 的默认）'],
+        ['plan', '计划模式', '先出计划，批准后再动手'],
+        ['ask', '只问答', '只读，回答问题不改文件'],
+        ['yolo', 'YOLO', 'Agent 模式，全部放行，不再询问'],
     ],
 };
 

@@ -16,6 +16,7 @@ test('each agent offers the modes Happy CLI accepts for it', () => {
     assert.deepEqual(keys(permissionOptions({ flavor: 'codex' })), ['auto', 'default', 'read-only', 'safe-yolo', 'yolo']);
     assert.deepEqual(keys(permissionOptions({ flavor: 'gemini' })), ['default', 'read-only', 'safe-yolo', 'yolo']);
     assert.deepEqual(keys(agentPermissionOptions('codex')), keys(permissionOptions({ flavor: 'codex' })));
+    assert.deepEqual(keys(permissionOptions({ flavor: 'cursor' })), ['agent', 'plan', 'ask', 'yolo']);
 });
 
 test('Happy Agent and unknown agents get none', () => {
@@ -35,6 +36,8 @@ test('a default permission applies only where the session has that mode', () => 
     assert.equal(defaultsFor({ flavor: 'codex' }).permission, 'yolo');
     assert.equal(defaultsFor({ flavor: 'claude' }).permission, 'plan');
     assert.equal(defaultsFor({ flavor: 'gemini' }).permission, null);
+    saveDefault('cursor', 'permission', 'yolo');
+    assert.equal(defaultsFor({ flavor: 'cursor' }).permission, 'yolo');
     assert.equal(defaultsFor({ client: { id: 'rig' }, flavor: 'codex' }).permission, null);
     saveDefault('codex', 'permission', '');
     assert.equal(defaultsFor({ flavor: 'codex' }).permission, null);

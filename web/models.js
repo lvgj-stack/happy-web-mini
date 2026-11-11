@@ -1,6 +1,8 @@
 // Which models a session can switch to, and how a choice goes on the wire.
 // Mirrors packages/happy-ios/Sources/HappyCore/Composer/ModelModeOptions.swift,
 // RigCatalog.swift and Settings/AgentDefaults.swift (hardcodedModels).
+// Cursor has no fixed list: its sessions report the models cursor-agent
+// offers (meta.models), and the composer offers those.
 
 const HARDCODED = {
     claude: [
@@ -130,6 +132,7 @@ export const DEFAULT_AGENTS = [
     { id: 'claude', name: 'Claude Code' },
     { id: 'codex', name: 'Codex' },
     { id: 'gemini', name: 'Gemini' },
+    { id: 'cursor', name: 'Cursor' },
 ];
 
 /** [{ key, name, model }] an agent's hardcoded catalog (the same lists the composer falls back to). */
