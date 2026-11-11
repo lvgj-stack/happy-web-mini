@@ -387,7 +387,7 @@
   .md-option:active { transform: translateY(1px); }
   .msg-copy { position: absolute; top: 100%; left: -4px; z-index: 1; }
   .msg-time { position: absolute; top: 100%; left: 24px; font-size: 12px; line-height: 24px; color: var(--muted); white-space: nowrap; }
-  .msg.agent:hover > .msg-copy { opacity: 1; }
+  .msg.agent:hover > .msg-copy, .turn-final > .msg.agent > .msg-copy { opacity: 1; } /* a turn's answer keeps it, lined up with its time */
   @media (hover: none) {
     .copy-btn { opacity: 1; }
     .msg-copy { position: static; margin: 2px 0 0 -4px; }

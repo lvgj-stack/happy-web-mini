@@ -1464,7 +1464,8 @@ function refreshTurn(thread, block) {
     const when = block.head.hidden ? finishedAt(block) : '';
     if (when && answer) {
         stamp ??= answer.appendChild(el('span', 'msg-time'));
-        stamp.textContent = when;
+        const took = workedFor(block);
+        stamp.textContent = took == null ? when : `${when} · 耗时 ${formatDuration(took)}`;
     } else stamp?.remove();
 }
 
@@ -1473,13 +1474,19 @@ function finishedAt(block) {
     return messageTime(block.end || block.last || block.lastAt);
 }
 
+/** How long a finished turn took (ms), or null if its start is unknown. */
+function workedFor(block) {
+    const start = block.start ?? block.first;
+    return start == null ? null : (block.end ?? block.last ?? start) - start;
+}
+
 /** Header text and the clocks of tools still running. */
 function tickTurn(block, running = block.el.classList.contains('running')) {
     const now = Date.now();
     const start = block.start ?? block.first ?? now;
     block.label.textContent = running
         ? `正在工作 ${formatDuration(now - start)}`
-        : `已工作 ${formatDuration((block.end ?? block.last ?? start) - start)}${finishedAt(block) ? ` · ${finishedAt(block)}` : ''}`;
+        : `已工作 ${formatDuration(workedFor(block) ?? 0)}${finishedAt(block) ? ` · ${finishedAt(block)}` : ''}`;
     if (!running) return;
     for (const row of block.tools.values()) {
         if (!row.classList.contains('done')) row.querySelector('.time').textContent = formatDuration(now - Number(row.dataset.time));
