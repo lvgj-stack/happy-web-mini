@@ -16,6 +16,7 @@ import { agentPermissionOptions, permissionOptions } from './permissions.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
 import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
+import { AGENT_NAMES, agentFlavor, agentIconSvg } from './agentIcons.js';
 import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
@@ -469,14 +470,14 @@ function markRead(s) {
     renderList();
 }
 
-const AGENT_TAGS = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', cursor: 'Cursor' };
-
-/** The small tag naming the agent a session runs on (Claude when it doesn't say). */
-function agentTag(s) {
-    const flavor = s.meta.flavor || 'claude';
-    const tag = el('span', 'agent-tag', AGENT_TAGS[flavor] ?? flavor);
-    tag.dataset.agent = flavor;
-    return tag;
+/** The logo of the agent a session runs on, leading the row. */
+function agentIcon(s) {
+    const flavor = agentFlavor(s.meta);
+    const icon = el('span', 'agent-icon');
+    icon.dataset.agent = flavor;
+    icon.title = AGENT_NAMES[flavor] ?? flavor;
+    icon.innerHTML = agentIconSvg(flavor, 14);
+    return icon;
 }
 
 function row(s, sub) {
@@ -496,9 +497,8 @@ function row(s, sub) {
     status.children[1].classList.add('st-working');
     status.children[2].classList.add('st-waiting');
     status.children[3].classList.add('st-unread');
-    title.append(status, el('span', 'name', sessionTitle(s)));
+    title.append(agentIcon(s), status, el('span', 'name', sessionTitle(s)));
     if (waitingSets(s).length) title.append(el('em', 'asking', waitingLabel(s)));
-    title.append(agentTag(s));
     r.append(title);
     const parts = [].concat(sub ?? []).filter(Boolean);
     if (parts.length) {
