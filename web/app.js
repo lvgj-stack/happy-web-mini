@@ -29,6 +29,7 @@ import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
 import { linkTracker, scanHistory } from './links.js';
+import { compactCount, lineStats, syncLines } from './lines.js';
 import { fitToViewport } from './viewport.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
@@ -68,6 +69,12 @@ const state = {
     askSignature: null,
     thinkingNode: null,
     browse: null,            // ↑ history in the composer: { sessionId, index, draft, text } while walking it
+    lines: new Map(),        // session id -> lines changed, see linesOf
+    linesQueue: [],          // sessions waiting for their counts to catch up, one at a time
+    linesRunning: false,
+    linesGen: 0,             // bumped on logout: a run still going stops
+    linesFirst: null,        // the session just opened: the others step aside for it
+    linesRender: null,
 };
 
 // ---------- HTTP ----------
@@ -165,12 +172,14 @@ function logout() {
     localStorage.removeItem('happy.secret');
     localStorage.removeItem('happy.token');
     // Decrypted links stay with the account, not on a shared machine.
-    for (const key of Object.keys(localStorage)) if (key.startsWith('happy.links.')) localStorage.removeItem(key);
+    for (const key of Object.keys(localStorage)) if (key.startsWith('happy.links.') || key.startsWith('happy.lines.')) localStorage.removeItem(key);
     clearInterval(state.messageTimer);
     clearInterval(state.listTimer);
+    clearTimeout(state.linesRender);
+    state.linesGen++;
     socket?.disconnect();
     socket = null;
-    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map() });
+    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map() });
     $('app').hidden = true;
     $('login').hidden = false;
     desktop.reset();
@@ -220,6 +229,7 @@ async function syncSessions() {
         }
         cursor = page.hasNext ? page.nextCursor : null;
     } while (cursor);
+    queueAllLines();
     renderList();
     renderHead();
     renderAsk();
@@ -499,6 +509,8 @@ function row(s, sub) {
     status.children[3].classList.add('st-unread');
     title.append(agentIcon(s), status, el('span', 'name', sessionTitle(s)));
     if (waitingSets(s).length) title.append(el('em', 'asking', waitingLabel(s)));
+    const lines = linesNode(s);
+    if (lines) title.append(lines);
     r.append(title);
     const parts = [].concat(sub ?? []).filter(Boolean);
     if (parts.length) {
@@ -522,9 +534,9 @@ function renderList() {
 
     // Rebuild only when what the list shows changed; heartbeats alone do not.
     const signature = JSON.stringify([[...state.collapsed], groups.map((m) =>
-        [m.key, m.name, m.sessions.map((s) => [s.id, sessionTitle(s), kindOf(s), JSON.stringify(checkout(s)), s.meta.task?.folderName, waitingSets(s).length, isUnread(s), inBackground(s)])]),
+        [m.key, m.name, m.sessions.map((s) => [s.id, sessionTitle(s), kindOf(s), JSON.stringify(checkout(s)), s.meta.task?.folderName, waitingSets(s).length, isUnread(s), inBackground(s), linesKey(s)])]),
         archived.length, state.archivedOpen, archived.length > archivedRows.length,
-        archivedRows.map((s) => [s.id, sessionTitle(s), s.meta.path, s.meta.host, archivedAt(s)])]);
+        archivedRows.map((s) => [s.id, sessionTitle(s), s.meta.path, s.meta.host, archivedAt(s), linesKey(s)])]);
     if (signature === state.listSignature) return;
     state.listSignature = signature;
 
@@ -648,6 +660,180 @@ function renderHead() {
     const { shortPath } = place(s);
     const status = isArchived(s) ? '已归档' : s.active ? '在线' : '离线';
     $('chat-sub').replaceChildren(...[s.meta.host, shortPath, status].filter(Boolean).map((t) => el('span', null, t)));
+    const lines = linesNode(s);
+    if (lines) $('chat-sub').append(lines);
+}
+
+// ---------- Lines changed: +120 −34 in the list and the title (see lines.js) ----------
+
+const LINES_RETRY_MS = 60_000;
+const LINES_PAGE = 200; // the server allows 500
+const linesStoreKey = (id) => `happy.lines.${id}`;
+
+/** What a message decrypts to, or null. */
+async function decryptMessage(s, m) {
+    return m?.content?.t === 'encrypted' ? decryptJSON(s.dataKey, m.content.c) : null;
+}
+
+/** A session's counts: { stats, cover, busy, dirty, failedAt }, read from this browser on first use. */
+function linesOf(s) {
+    let idx = state.lines.get(s.id);
+    if (idx) return idx;
+    let cached = null;
+    try {
+        const c = JSON.parse(localStorage.getItem(linesStoreKey(s.id)) || 'null');
+        if (c?.v === 1 && Number.isFinite(c.from) && Number.isFinite(c.to)) cached = c;
+    } catch {
+        // unreadable: count again
+    }
+    idx = {
+        stats: lineStats(cached),
+        cover: cached && { from: cached.from, to: cached.to, complete: !!cached.complete }, // the seqs counted (see syncLines)
+        busy: false,  // a sync is running
+        dirty: false, // a message came in during it
+        failedAt: 0,
+    };
+    state.lines.set(s.id, idx);
+    return idx;
+}
+
+function saveLines(s, idx) {
+    if (!idx.cover) return;
+    try {
+        localStorage.setItem(linesStoreKey(s.id), JSON.stringify({ v: 1, ...idx.cover, ...idx.stats.toJSON() }));
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+/** Kept up to date: the online sessions, and whichever is open. */
+const linesTracked = (s) => s === state.current || (s.meta.isSideChat !== true && isOnline(s));
+
+function needsLines(s) {
+    const idx = linesOf(s);
+    if (idx.busy || Date.now() - idx.failedAt < LINES_RETRY_MS) return false;
+    return !idx.cover || !idx.cover.complete || idx.cover.to < (s.seq ?? 0);
+}
+
+/** Line up one session; `first`: before the rest (the one just opened). */
+function wantLines(s, first = false) {
+    const queue = state.linesQueue;
+    const at = queue.indexOf(s);
+    if (at >= 0 && first) queue.splice(at, 1);
+    if (at < 0 || first) {
+        if (!needsLines(s)) return;
+        if (first) { queue.unshift(s); state.linesFirst = s; } else queue.push(s);
+    }
+    runLines();
+}
+
+/** Every tracked session that is behind, in list order. */
+function queueAllLines() {
+    if (state.current) wantLines(state.current);
+    for (const s of liveSessions()) wantLines(s);
+}
+
+async function runLines() {
+    if (state.linesRunning) return;
+    state.linesRunning = true;
+    const gen = state.linesGen;
+    try {
+        while (state.linesGen === gen && state.linesQueue.length) {
+            const s = state.linesQueue.shift();
+            if (state.linesFirst === s) state.linesFirst = null;
+            if (needsLines(s)) await syncSessionLines(s);
+        }
+    } finally {
+        if (state.linesGen === gen) state.linesRunning = false;
+    }
+}
+
+/** Decrypt a page of raw messages, in seq order. */
+async function linesRows(s, messages) {
+    return Promise.all(messages.map(async (m) => ({ seq: m.seq, raw: await decryptMessage(s, m) })));
+}
+
+async function syncSessionLines(s) {
+    const idx = linesOf(s);
+    const alive = () => state.lines.get(s.id) === idx; // gone on logout
+    const url = (q) => `/v3/sessions/${encodeURIComponent(s.id)}/messages?${q}`;
+    idx.busy = true;
+    idx.dirty = false;
+    try {
+        await syncLines({
+            stats: idx.stats,
+            cover: idx.cover,
+            target: () => s.seq ?? 0,
+            fetchOlder: async (before) => {
+                const page = await api('GET', url(`before_seq=${before}&limit=${LINES_PAGE}`));
+                return { rows: await linesRows(s, page.messages.slice().reverse()), hasMore: page.hasMore }; // DESC -> ASC
+            },
+            fetchNewer: async (after) => {
+                const page = await api('GET', url(`after_seq=${after}&limit=${LINES_PAGE}`));
+                return { rows: await linesRows(s, page.messages), hasMore: page.hasMore };
+            },
+            save: (cover) => {
+                if (!alive()) return;
+                idx.cover = cover;
+                saveLines(s, idx);
+                linesChanged(s);
+            },
+            alive,
+            pause: () => state.linesFirst !== null && state.linesFirst !== s,
+        });
+    } catch (e) {
+        console.error(e);
+        idx.failedAt = Date.now(); // the next list sync after a minute tries again
+    } finally {
+        idx.busy = false;
+    }
+    if (alive() && (idx.dirty || state.linesFirst)) wantLines(s); // what came in while it ran, or the rest after stepping aside
+}
+
+/** A pushed message: counted at once when it continues what is counted, else fetched. */
+function pushLines(s, m, raw) {
+    const idx = linesOf(s);
+    if (idx.busy) { idx.dirty = true; return; }
+    if (idx.cover && m.seq === idx.cover.to + 1) {
+        const changed = idx.stats.see(raw);
+        idx.cover = { ...idx.cover, to: m.seq };
+        saveLines(s, idx);
+        if (changed) linesChanged(s);
+        return;
+    }
+    if (!idx.cover || m.seq > idx.cover.to) wantLines(s);
+}
+
+/** Redraw what shows the counts, at most a few times a second. */
+function linesChanged() {
+    if (state.linesRender) return;
+    state.linesRender = setTimeout(() => {
+        state.linesRender = null;
+        renderList();
+        const s = state.current;
+        const sub = $('chat-sub');
+        sub.querySelector('.lines')?.remove();
+        const node = s && linesNode(s);
+        if (node) sub.append(node);
+    }, 250);
+}
+
+/** What the counts look like now, for the list's change check. */
+function linesKey(s) {
+    const { stats, cover } = linesOf(s);
+    return `${stats.add}/${stats.del}/${stats.files}/${cover?.complete ? 1 : 0}`;
+}
+
+/** "+120 −34", or null while the session has changed nothing. */
+function linesNode(s) {
+    const { stats, cover } = linesOf(s);
+    if (!stats.add && !stats.del) return null;
+    const node = el('span', 'lines');
+    node.append(el('span', 'add', `+${compactCount(stats.add)}`), el('span', 'del', `−${compactCount(stats.del)}`));
+    node.title = `改了 ${stats.files} 个文件：新增 ${stats.add} 行，删除 ${stats.del} 行`
+        + (cover?.complete ? '' : '（更早的消息还在统计）')
+        + '\n按改文件的工具调用统计，在命令行里改的不算';
+    return node;
 }
 
 // ---------- Links: the side panel (see links.js) ----------
@@ -1033,6 +1219,7 @@ async function openSession(s) {
     showThread(s, thread);
     markRead(s);
     startLinkScan(s, thread);
+    wantLines(s, true);
     pollMessages(s); // whatever arrived after the newest page, or while cached
     // Socket pushes new messages; polling only covers a dropped connection.
     state.messageTimer = setInterval(() => { if (!socket?.connected) pollMessages(state.current); }, 3000);
@@ -1130,13 +1317,12 @@ async function pollMessages(s = state.current) {
 }
 
 /** One pushed message. Renders it once, in seq order. */
-async function acceptMessage(s, m) {
+async function acceptMessage(s, m, raw) {
     const thread = state.threads.get(s.id);
     if (!thread) return; // never opened: it loads when it is
     thread.afterSeq = Math.max(thread.afterSeq, m.seq);
     if (thread.seen.has(m.id)) return;
     thread.seen.add(m.id);
-    const raw = m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null;
     renderMessage(thread, decoded(raw, m), m.seq);
 }
 
@@ -2560,7 +2746,10 @@ async function onUpdate(body) {
         if (!s) return;
         s.seq = Math.max(s.seq ?? 0, body.message?.seq ?? 0);
         sessionChanged(s);
-        await acceptMessage(s, body.message);
+        const counted = linesTracked(s);
+        const raw = counted || state.threads.has(s.id) ? await decryptMessage(s, body.message) : null;
+        if (counted) pushLines(s, body.message, raw);
+        await acceptMessage(s, body.message, raw);
         if (viewing(s)) markRead(s); else renderList();
         return;
     }

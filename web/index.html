@@ -192,6 +192,13 @@
   .row .agent-icon[data-agent="gemini"] { color: #3186FF; }
   .row .agent-icon[data-agent="cursor"] { color: #3A3D3B; }
   .machine.archived .row .agent-icon { opacity: .55; }
+  /* Lines the session changed: +120 −34 at the row's right end */
+  .lines { display: inline-flex; gap: 3px; font-variant-numeric: tabular-nums; }
+  .lines .add { color: #3F7D4C; }
+  .lines .del { color: #B5473A; }
+  .row .lines { flex: none; margin-left: auto; font-size: 11px; line-height: 16px; }
+  .row .asking ~ .lines { margin-left: 0; }
+  #chat-sub .lines { gap: 4px; }
   .row .sub { display: flex; gap: 10px; color: var(--muted); font-size: 12px; padding-left: 42px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .sub span { overflow: hidden; text-overflow: ellipsis; }
   .empty-list { color: var(--muted); font-size: 13px; padding: 0 12px; }
@@ -243,8 +250,8 @@
   #chat-head .text { flex: 1; min-width: 0; }
   #chat-title { font: 400 22px/1.4 var(--serif); margin: 0; overflow-wrap: anywhere; }
   #chat-sub { display: flex; flex-wrap: nowrap; gap: 4px 14px; color: var(--muted); font-size: 14px; margin-top: 4px; }
-  #chat-sub span { white-space: nowrap; flex: none; }
-  #chat-sub span:nth-child(2) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #chat-sub > span { white-space: nowrap; flex: none; }
+  #chat-sub > span:nth-child(2) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #back { display: none; margin-top: 6px; }
   #archive { margin-top: 6px; flex: none; }
   #notice { font-size: 14px; padding-bottom: 8px; }
