@@ -17,6 +17,30 @@ export function randomWorktreeName(random = Math.random) {
     return `${pick(ADJECTIVES, random)}-${pick(NOUNS, random)}`;
 }
 
+const DEFAULT_KEY = 'happy.newWorktree';
+
+/** 设置 › 新建会话: where the Worktree select starts, 'new' (a new worktree) or 'dir' (the directory itself). */
+export function readWorktreeDefault(storage) {
+    return storage.getItem(DEFAULT_KEY) === 'new' ? 'new' : 'dir';
+}
+
+export function setWorktreeDefault(storage, value) {
+    if (value === 'new') storage.setItem(DEFAULT_KEY, 'new'); else storage.removeItem(DEFAULT_KEY);
+}
+
+/**
+ * The Worktree option to select: what was picked in the dialog while it can
+ * still be picked, else the directory itself when it is one of the checkouts,
+ * else the setting's default. `values` are the options that can be picked
+ * ('' for the directory, `newValue`, the checkouts' paths); `choice` is undefined
+ * until something is picked.
+ */
+export function worktreeSelection({ values, choice, directory, preferNew, newValue }) {
+    if (choice !== undefined && values.includes(choice)) return choice;
+    if (directory && values.includes(directory)) return directory;
+    return preferNew && values.includes(newValue) ? newValue : '';
+}
+
 /** The repository a path belongs to: a `.dev/worktree/*` path counts as its main checkout. */
 export function repoOf(path) {
     const at = path.indexOf(WORKTREE_MARKER);

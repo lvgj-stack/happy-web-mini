@@ -24,7 +24,7 @@ import { resumeAvailability, resumeFallback } from './resume.js';
 import { messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
-import { createWorktree, listWorktrees, removeWorktree, repoOf, worktreeOf } from './worktree.js';
+import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, repoOf, setWorktreeDefault, worktreeOf, worktreeSelection } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
@@ -2599,6 +2599,8 @@ function renderSettings() {
     renderNotifySetting();
     renderWallpaperSetting();
     renderChatScaleSetting();
+    const worktreeDefault = readWorktreeDefault(localStorage);
+    for (const radio of document.querySelectorAll('input[name="worktree-default"]')) radio.checked = radio.value === worktreeDefault;
     const defaults = loadDefaults();
     const box = $('defaults');
     box.replaceChildren();
@@ -3067,7 +3069,8 @@ $('list').addEventListener('contextmenu', (e) => {
 const AGENTS = [['claude', 'Claude Code'], ['codex', 'Codex'], ['gemini', 'Gemini'], ['cursor', 'Cursor']];
 /** Offered unless the computer says it lacks it; Cursor only when it says it has it (older CLIs do not report it). */
 const agentAvailable = (key, available) => key === 'claude' || (key === 'cursor' ? available?.cursor === true : !available || available[key] !== false);
-const newSession = { machines: [], busy: false, worktrees: null, worktreesFor: null, worktreeTimer: null };
+// worktreeChoice: the Worktree option picked by hand since the dialog opened (undefined: none, so the setting's default applies).
+const newSession = { machines: [], busy: false, worktrees: null, worktreesFor: null, worktreeTimer: null, worktreeChoice: undefined };
 const WT_NEW = '\u0000new'; // the Worktree select's 「新建 worktree」; '' is none, anything else an existing checkout's path
 
 /** The account's machines whose key we can open, online ones first. */
@@ -3146,11 +3149,11 @@ async function machineBash(m, command, cwd) {
 
 /**
  * The Worktree select: none, a new one, then the repository's other checkouts
- * once listed. A directory that is itself one of them starts selected on it.
+ * once listed. A directory that is itself one of them starts selected on it;
+ * otherwise it starts on 设置 › 新建会话's default until something is picked.
  */
 function renderWorktreeSelect() {
     const select = $('new-worktree');
-    const keep = select.value;
     const m = newSession.machines.find((x) => x.id === $('new-machine').value);
     const directory = typedDirectory(m);
     const listed = newSession.worktreesFor === (m && directory && `${m.id}\u0000${repoOf(directory)}`);
@@ -3161,8 +3164,8 @@ function renderWorktreeSelect() {
     select.replaceChildren(option('', '不用，直接在这个目录里'), fresh,
         ...(worktrees ?? []).map((w) => option(w.path, `${w.branch}（已有）`, w.path)));
     const values = [...select.options].filter((o) => !o.disabled).map((o) => o.value);
-    select.value = values.includes(keep) && keep !== '' ? keep
-        : directory && values.includes(directory) ? directory : '';
+    select.value = worktreeSelection({ values, choice: newSession.worktreeChoice, directory,
+        preferNew: readWorktreeDefault(localStorage) === 'new', newValue: WT_NEW });
 }
 
 function onNewDirChanged() {
@@ -3195,6 +3198,7 @@ async function openNewSession(preferMachineId, dir) {
     $('new-error').textContent = '';
     $('new-machine').replaceChildren(el('option', null, '正在载入…'));
     $('new-submit').disabled = true;
+    newSession.worktreeChoice = undefined;
     if (!dialog.open) dialog.showModal();
     try {
         newSession.machines = await loadMachines();
@@ -3301,7 +3305,7 @@ async function submitNewSession(e) {
         const s = await waitForSession(r.sessionId);
         $('new-session').close();
         $('new-dir').value = '';
-        $('new-worktree').value = '';
+        newSession.worktreeChoice = undefined;
         if (s) openSession(s); else notice('会话已启动，稍后会出现在列表里。');
     } catch (err) {
         $('new-error').textContent = made
@@ -3461,6 +3465,9 @@ $('brand-input').addEventListener('input', () => {
     applyBrand();
 });
 $('brand-input').addEventListener('change', settingsSaved);
+for (const radio of document.querySelectorAll('input[name="worktree-default"]')) {
+    radio.addEventListener('change', () => { if (radio.checked) { setWorktreeDefault(localStorage, radio.value); settingsSaved(); } });
+}
 $('wallpaper-file').onchange = () => { pickWallpaperFile($('wallpaper-file').files[0]); $('wallpaper-file').value = ''; };
 $('wallpaper-change').onclick = () => $('wallpaper-file').click();
 $('wallpaper-remove').onclick = () => { removeWallpaperImage(localStorage); wallpaperChanged(); };
@@ -3501,7 +3508,8 @@ desktop.onOpenSession((id) => {
 $('new-open').onclick = () => openNewSession();
 $('new-form').addEventListener('submit', submitNewSession);
 $('new-cancel').onclick = () => $('new-session').close();
-$('new-machine').onchange = () => { $('new-dir').value = ''; renderNewForm(); };
+$('new-machine').onchange = () => { $('new-dir').value = ''; newSession.worktreeChoice = undefined; renderNewForm(); };
+$('new-worktree').addEventListener('change', () => { newSession.worktreeChoice = $('new-worktree').value; });
 $('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
 $('archive-cancel').onclick = () => $('archive-dialog').close();

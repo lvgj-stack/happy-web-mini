@@ -32,7 +32,8 @@
 - `localStorage` 的键都以 `happy.` 开头。现有的键有：`happy.server`、`happy.token`、`happy.secret`、`happy.seen`、
   `happy.collapsed`、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
   `happy.linksHidden`、`happy.links.<会话 id>`、`happy.lines.<会话 id>`，以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
-  `happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）。
+  `happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
+  `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
 - **从会话里解密出来的内容**（链接、文件路径之类）按会话缓存时，退出登录要清掉：加到 `logout()` 里按前缀删除的那一行。
 - 读缓存要容错：用 `try/catch` 包住 `JSON.parse`，带上版本号 `v`，格式不对就当作没有缓存，重新算。
   写缓存也包 `try/catch`（配额可能满了，背景图本身就占 1.5 MB 左右）。
@@ -74,6 +75,8 @@
   Codex 有 `approved_for_session`）、`communication`（Codex / Happy Agent 的提问表单）、`abort`、`bash`、`killSession`（归档）。
 - 机器 RPC：`spawn-happy-session`（新建会话）、`resume-happy-session`（恢复会话，带上会话密钥作为 fallback）、
   `bash`（worktree 的列出 / 新建 / 删除，见 `worktree.js`）。
+- 新建会话的 Worktree 选中哪项（`worktreeSelection`）：本次对话框里手动选过且还能选的 → 目录本身就是某个 worktree 时选它 →
+  设置里的默认值。手动选择在打开对话框、换电脑、启动成功后清掉，改目录不清（打字过程中不会被重置）。
 - Codex 的模型列表经会话的 `bash` RPC 在那台电脑上查 `codex app-server`（`codexModels.js`），不用升级 Happy CLI。
 - CLI 不在线时归档：网页自己用 `update-metadata` 写 `lifecycleState: "archived"`。
 

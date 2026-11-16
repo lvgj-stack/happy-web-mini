@@ -104,6 +104,7 @@
   .brand-field { max-width: 320px; }
   .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px; }
   .check input { width: 16px; height: 16px; accent-color: var(--moss); margin: 0; }
+  .radio-list { display: flex; flex-direction: column; align-items: flex-start; }
   #notify-hint.warn { color: var(--error); }
   #notify-sound-row:not([hidden]) { display: flex; width: fit-content; margin-left: 24px; }
   .check:has(input:disabled) { color: var(--muted); cursor: default; }
@@ -638,6 +639,12 @@
         <label class="check"><input type="checkbox" id="notify-toggle"> 任务完成或等你回答时发系统通知</label>
         <label class="check" id="notify-sound-row" hidden><input type="checkbox" id="notify-sound"> 通知带提示音</label>
         <p class="hint" id="notify-hint">只在这个标签页不在前台时通知，点通知直接打开那个会话。只对这个浏览器生效，页面要开着。</p>
+      </div>
+      <h3>新建会话</h3>
+      <p class="hint">新建会话时 Worktree 一栏默认选哪个，新建时还可以改。目录本身就是某个 worktree 时选中它自己；目录不是 git 仓库时只能直接在目录里。只保存在这个浏览器里。</p>
+      <div class="radio-list" role="radiogroup" aria-label="新建会话的 Worktree 默认值">
+        <label class="check"><input type="radio" name="worktree-default" value="dir"> 直接在这个目录里</label>
+        <label class="check"><input type="radio" name="worktree-default" value="new"> 新建 worktree</label>
       </div>
       <h3>默认模型和权限</h3>
       <p class="hint">给会话发消息时，如果没在输入框下方单独选过，就用这里的默认值。只保存在这个浏览器里，不影响手机 App。Happy Agent 会话用它自己的模型和权限，不受影响。

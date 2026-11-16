@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, removeWorktree, repoOf, worktreeOf } from '../worktree.js';
+import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, readWorktreeDefault, removeWorktree, repoOf, setWorktreeDefault, worktreeOf, worktreeSelection } from '../worktree.js';
 
 /** The daemon's `bash` RPC, locally: same result shape. */
 const bash = (command, cwd) => new Promise((resolve) => {
@@ -134,4 +134,31 @@ test('a detached worktree: no branch is touched', async () => {
     await bash('git branch loose', repo); // same name as the folder, must survive
     assert.deepEqual(await removeWorktree(path, bash), { branch: null, branchDeleted: false, branchError: '' });
     assert.equal((await bash('git branch --list loose', repo)).stdout.trim(), 'loose');
+});
+
+test('readWorktreeDefault / setWorktreeDefault keep the choice, directory by default', () => {
+    const store = new Map();
+    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+    assert.equal(readWorktreeDefault(storage), 'dir');
+    setWorktreeDefault(storage, 'new');
+    assert.equal(readWorktreeDefault(storage), 'new');
+    setWorktreeDefault(storage, 'dir');
+    assert.equal(readWorktreeDefault(storage), 'dir');
+    assert.equal(store.size, 0);
+});
+
+test('worktreeSelection: a hand pick, then the directory as a checkout, then the default', () => {
+    const NEW = '\u0000new';
+    const values = ['', NEW, '/r/.dev/worktree/a'];
+    const pick = (o) => worktreeSelection({ values, newValue: NEW, directory: '/r', preferNew: false, choice: undefined, ...o });
+    assert.equal(pick({}), '');
+    assert.equal(pick({ preferNew: true }), NEW);
+    // The directory is itself a checkout: that one, whatever the default.
+    assert.equal(pick({ preferNew: true, directory: '/r/.dev/worktree/a' }), '/r/.dev/worktree/a');
+    // A hand pick wins, '' included, while it can still be picked.
+    assert.equal(pick({ preferNew: true, choice: '' }), '');
+    assert.equal(pick({ choice: NEW }), NEW);
+    assert.equal(pick({ preferNew: true, choice: '/r/.dev/worktree/gone' }), NEW);
+    // Not a git repository: 新建 worktree is disabled, so the directory.
+    assert.equal(worktreeSelection({ values: [''], newValue: NEW, directory: '/x', preferNew: true, choice: NEW }), '');
 });
