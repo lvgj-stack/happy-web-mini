@@ -142,3 +142,9 @@ test('defaults use the queried catalog and drop efforts unsupported by a newly s
         if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
     }
 });
+
+test('Claude offers Fable 5.2 first when the CLI reports no list', () => {
+    const [first] = modelOptions({ flavor: 'claude' });
+    assert.deepEqual(first, { key: 'claude-fable-5-2', name: 'Fable 5.2', model: 'claude-fable-5-2' });
+    assert.equal(agentModelOptions('claude')[0].key, 'claude-fable-5-2');
+});
