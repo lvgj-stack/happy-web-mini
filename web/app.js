@@ -31,6 +31,7 @@ import { contextLine, contextUsage } from './context.js';
 import { linkTracker, scanHistory } from './links.js';
 import { compactCount, lineStats, syncLines } from './lines.js';
 import { fitToViewport } from './viewport.js';
+import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 
@@ -54,6 +55,8 @@ const state = {
     messageTimer: null,
     listTimer: null,
     collapsed: new Set(JSON.parse(localStorage.getItem('happy.collapsed') || '[]')),
+    hostOrder: readHostOrder(localStorage.getItem('happy.hostOrder')), // computers as the person dragged them
+    dragHost: null,          // the computer being dragged; the list holds still meanwhile
     archivedOpen: localStorage.getItem('happy.archivedOpen') === '1', // the 已归档 group; closed by default
     archivedShown: ARCHIVED_PAGE, // how many archived rows the open group lists
     machines: null,          // the account's computers, for 恢复会话 (see refreshMachines)
@@ -306,7 +309,8 @@ const byOrderKey = (key) => (a, b) => {
 
 /**
  * Online sessions: computer › bots, tasks, then chats in a tree of
- * project › (its own chats, then worktree › chats). Ordered by things that do
+ * project › (its own chats, then worktree › chats). Computers go in the order
+ * the person dragged them into, then by name. Ordered by things that do
  * not change while a session runs (names, order keys, creation time), so
  * heartbeats never reshuffle the list. `sessions` is the order rows show in.
  */
@@ -326,8 +330,7 @@ function groupLive(sessions) {
         if (!p.worktrees.has(c.workspaceId)) p.worktrees.set(c.workspaceId, { id: c.workspaceId, name: c.workspaceName, sessions: [] });
         p.worktrees.get(c.workspaceId).sessions.push(s);
     }
-    return [...machines.values()]
-        .sort((a, b) => byName(a, b) || a.key.localeCompare(b.key))
+    return sortHosts([...machines.values()], state.hostOrder)
         .map((m) => {
             const bots = m.bots.sort(byOrderKey((s) => s.meta.bot.orderKey));
             const tasks = m.tasks.sort(byOrderKey((s) => s.meta.task.orderKey));
@@ -538,6 +541,7 @@ function renderList() {
         archived.length, state.archivedOpen, archived.length > archivedRows.length,
         archivedRows.map((s) => [s.id, sessionTitle(s), s.meta.path, s.meta.host, archivedAt(s), linesKey(s)])]);
     if (signature === state.listSignature) return;
+    if (state.dragHost) return; // rebuilt when the drag ends; removing the dragged head would cancel it
     state.listSignature = signature;
 
     const keepScroll = list.scrollTop;
@@ -546,7 +550,10 @@ function renderList() {
     for (const m of groups) {
         const collapsed = state.collapsed.has(m.key);
         const section = el('section', 'machine' + (collapsed ? ' collapsed' : ''));
-        section.append(groupHead(m.name, m.count, collapsed, () => toggleCollapsed(m.key), 'computer', m.sessions));
+        section.dataset.key = m.key;
+        const head = groupHead(m.name, m.count, collapsed, () => toggleCollapsed(m.key), 'computer', m.sessions);
+        section.append(head);
+        dragHost(section, head, m.key);
         const rows = el('div', 'rows');
         if (m.bots.length) rows.append(kindBlock('Bot', 'agent', m.bots.map((s) => row(s))));
         if (m.tasks.length) rows.append(kindBlock('任务', 'todo', m.tasks.map((s) => row(s, taskPath(s)))));
@@ -561,6 +568,60 @@ function renderList() {
     }
     if (archived.length) list.append(archivedSection(archived, archivedRows));
     list.scrollTop = keepScroll;
+}
+
+/** The computers' keys in the order the list shows them. */
+const shownHosts = () => [...$('list').querySelectorAll('section.machine[data-key]')].map((x) => x.dataset.key);
+
+/** Put computer `key` before (or `after`) `target`; remembered in this browser. */
+function placeHost(key, target, after = false) {
+    const order = moveHost(state.hostOrder, shownHosts(), key, target, after);
+    if (order === state.hostOrder) return;
+    state.hostOrder = order;
+    try { localStorage.setItem('happy.hostOrder', writeHostOrder(order)); } catch { /* full: this tab still has it */ }
+    renderList();
+}
+
+/** Drop marks off every computer. */
+const clearHostMarks = () => $('list').querySelectorAll('.drop-before, .drop-after, .dragging')
+    .forEach((x) => x.classList.remove('drop-before', 'drop-after', 'dragging'));
+
+/** Over the lower half of a computer, a drop goes below it. */
+const dropsAfter = (section, e) => { const r = section.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
+
+/** Drag a computer by its head onto another one to reorder them. */
+function dragHost(section, head, key) {
+    head.draggable = true;
+    head.addEventListener('dragstart', (e) => {
+        state.dragHost = key;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', key); // Firefox starts no drag without data
+        section.classList.add('dragging');
+    });
+    head.addEventListener('dragend', () => {
+        state.dragHost = null;
+        clearHostMarks();
+        renderList(); // catch up on what changed meanwhile
+    });
+    section.addEventListener('dragover', (e) => {
+        if (!state.dragHost) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const after = dropsAfter(section, e);
+        section.classList.toggle('drop-before', state.dragHost !== key && !after);
+        section.classList.toggle('drop-after', state.dragHost !== key && after);
+    });
+    section.addEventListener('dragleave', (e) => {
+        if (!section.contains(e.relatedTarget)) section.classList.remove('drop-before', 'drop-after');
+    });
+    section.addEventListener('drop', (e) => {
+        if (!state.dragHost) return;
+        e.preventDefault();
+        const from = state.dragHost;
+        state.dragHost = null;
+        clearHostMarks();
+        placeHost(from, key, dropsAfter(section, e));
+    });
 }
 
 /** Fold or unfold a computer, project or worktree; remembered in this browser. */
@@ -3040,9 +3101,14 @@ function groupMenu(head) {
     const first = sessions[0];
     if (head.classList.contains('group-head')) {
         // A computer.
+        const shown = shownHosts();
+        const at = shown.indexOf(box.dataset.key);
         return [
             { label: '在这台电脑上新建会话', icon: 'newChat', hidden: !first?.meta.machineId, action: () => openNewSession(first.meta.machineId) },
-            read, '-', fold,
+            read, '-',
+            { label: '上移', icon: 'moveUp', hidden: at <= 0, action: () => placeHost(box.dataset.key, shown[at - 1]) },
+            { label: '下移', icon: 'moveDown', hidden: at < 0 || at >= shown.length - 1, action: () => placeHost(box.dataset.key, shown[at + 1], true) },
+            fold,
         ];
     }
     // A project or one of its worktrees.

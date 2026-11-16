@@ -35,6 +35,7 @@ import GitBranch from './node_modules/lucide-static/dist/esm/icons/git-branch.mj
 import RotateCcw from './node_modules/lucide-static/dist/esm/icons/rotate-ccw.mjs';
 import X from './node_modules/lucide-static/dist/esm/icons/x.mjs';
 import Link from './node_modules/lucide-static/dist/esm/icons/link.mjs';
+import ArrowDown from './node_modules/lucide-static/dist/esm/icons/arrow-down.mjs';
 
 const ICONS = {
     terminal: SquareTerminal,
@@ -69,6 +70,8 @@ const ICONS = {
     branch: GitBranch,
     close: X,
     link: Link,
+    moveUp: ArrowUp,
+    moveDown: ArrowDown,
 };
 
 /** Filled icons: the glyph is a solid shape, not an outline. */

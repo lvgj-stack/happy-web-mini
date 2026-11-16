@@ -30,7 +30,7 @@
 ## 状态和本地存储
 
 - `localStorage` 的键都以 `happy.` 开头。现有的键有：`happy.server`、`happy.token`、`happy.secret`、`happy.seen`、
-  `happy.collapsed`、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
+  `happy.collapsed`、`happy.hostOrder`（电脑的顺序，`{ v: 1, keys: [machineKey…] }`）、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
   `happy.linksHidden`、`happy.links.<会话 id>`、`happy.lines.<会话 id>`，以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
   `happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
   `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
@@ -38,6 +38,8 @@
 - 读缓存要容错：用 `try/catch` 包住 `JSON.parse`，带上版本号 `v`，格式不对就当作没有缓存，重新算。
   写缓存也包 `try/catch`（配额可能满了，背景图本身就占 1.5 MB 左右）。
 - 只存在本浏览器里的设置，在 README 里写明「只保存在这个浏览器里」。
+- 侧栏拖动电脑排序用 HTML5 拖放（`dragHost`）。拖动期间 `renderList` 不重建列表（重建会删掉正被拖的标题，拖动就断了），
+  松手后再补一次。顺序按 `machineKey` 存，离线的电脑留在存储里不删，上线后回到原位（`hostOrder.js` 的 `moveHost`）。
 
 ## 协议要点
 
