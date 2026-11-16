@@ -123,6 +123,15 @@ test('tracker: groups in order, label from the earliest text, restores from JSON
     assert.equal(back.list()[0].items[0].count, 1, 'a restored seq is not counted again');
 });
 
+test('tracker: newest first within a group, by first mention', () => {
+    const t = linkTracker();
+    t.see(agent('https://a.com/old'), 1);
+    t.see(agent('https://a.com/new'), 7);
+    t.see(agent('https://a.com/mid'), 4);
+    t.see(agent('https://a.com/old'), 9); // mentioned again later: still placed by where it came from
+    assert.deepEqual(t.list()[0].items.map((i) => i.url), ['https://a.com/new', 'https://a.com/mid', 'https://a.com/old']);
+});
+
 test('tracker: a bare earliest mention borrows a later link text', () => {
     const t = linkTracker();
     t.see(agent('[需求 Spec](https://x.feishu.cn/docx/D1)'), 9);

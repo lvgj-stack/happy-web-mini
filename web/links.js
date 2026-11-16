@@ -150,7 +150,7 @@ export function linkTracker(cached) {
             }
             return fresh;
         },
-        /** Groups in panel order, empty ones left out; each sorted by first mention. */
+        /** Groups in panel order, empty ones left out; each newest first, by first mention. */
         list() {
             const groups = new Map(KINDS.map((k) => [k, []]));
             for (const [url, e] of links) {
@@ -158,7 +158,7 @@ export function linkTracker(cached) {
                 groups.get(kind).push({ url, label, who: e.who, at: e.at, seq: e.seq, count: e.seqs.size });
             }
             return KINDS.filter((k) => groups.get(k).length)
-                .map((kind) => ({ kind, items: groups.get(kind).sort((a, b) => a.seq - b.seq) }));
+                .map((kind) => ({ kind, items: groups.get(kind).sort((a, b) => b.seq - a.seq) }));
         },
         toJSON() {
             const out = {};
