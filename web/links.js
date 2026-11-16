@@ -44,6 +44,24 @@ export function normalizeUrl(url) {
     return url.replace(/#(?![/!]).*$/, '').replace(/\/+$/, '');
 }
 
+/**
+ * The file path a markdown link points at, or null for a real URL. Agents link
+ * files by path (`[x](/root/a/x)`, `[app.js:12](web/app.js#L12)`, file://...):
+ * the file is on the agent's machine, so the browser cannot open it. The path
+ * comes back decoded, a #L12 / #L12-L20 fragment as :12 / :12-20.
+ */
+export function localPath(href) {
+    let p = href?.trim();
+    if (!p) return null;
+    if (/^file:/i.test(p)) p = p.replace(/^file:(\/\/[^/]*)?/i, '');
+    else if (p.startsWith('#') || p.startsWith('//') || /^[a-z][a-z\d+.-]+:/i.test(p)) return null; // C:\ is a path
+    try { p = decodeURI(p); } catch { /* keep it as written */ }
+    const line = p.match(/#L(\d+)(?:-L?(\d+))?$/);
+    p = p.replace(/#.*$/, '');
+    if (!p) return null;
+    return line ? `${p}:${line[1]}${line[2] ? `-${line[2]}` : ''}` : p;
+}
+
 /** Links in markdown, in order: `text` is the link text when it says more than the URL. Code is skipped. */
 export function extractLinks(markdown) {
     const out = [];

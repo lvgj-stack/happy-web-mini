@@ -97,6 +97,11 @@
 - 上下文剩余（`context.js`）：按最近一条回复的 `usage`（input + cache_creation + cache_read，subagent 的不算）和 CLI 盖上的 `context_window` 算。
 - 订阅用量（`usage.js`）：来自 `agentState.usageLimits`，只有 Claude 会话上报。
 
+### 文件路径链接
+
+- agent 常用文件路径当链接目标。`markdown.js` 在 DOMPurify 的钩子里用 `links.js` 的 `localPath()` 认出这类链接（没有 scheme 的相对 / 绝对路径、`file:`），
+  去掉 href，改成 `.path-link` + `data-path`；`app.js` 里点击或回车就复制路径。`#L12` 转成 `:12`。
+
 ### 扫历史的两套缓存
 
 - 右栏链接（`links.js`）：打开会话后扫一遍历史，缓存在 `happy.links.<id>`，记录已覆盖的 seq 区间，下次只补新的。

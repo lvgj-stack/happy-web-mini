@@ -388,6 +388,8 @@
   .markdown-body h3 { font-size: calc(16px * var(--chat-scale)); }
   .markdown-body h4, .markdown-body h5, .markdown-body h6 { font-size: calc(15px * var(--chat-scale)); color: var(--ink); }
   .markdown-body a { color: var(--moss); }
+  .markdown-body a.path-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+  .markdown-body a.path-link.copied::after { content: "已复制"; margin-left: 4px; font-size: .85em; color: var(--muted); text-decoration: none; display: inline-block; }
   .markdown-body blockquote { color: var(--muted); border-left-color: var(--rule); }
   .markdown-body code, .markdown-body pre, .markdown-body kbd, .markdown-body samp { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
   .markdown-body pre { position: relative; background: #F6F7F4; border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; font-size: calc(15px * var(--chat-scale)); line-height: 1.55; }

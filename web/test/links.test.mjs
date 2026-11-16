@@ -1,7 +1,7 @@
 // node --test: links in a session, gathered for the side panel.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyLink, extractLinks, joinRanges, linkTracker, normalizeUrl, scanHistory } from '../links.js';
+import { classifyLink, extractLinks, joinRanges, linkTracker, localPath, normalizeUrl, scanHistory } from '../links.js';
 
 test('extract: markdown links keep their text, bare URLs have none', () => {
     assert.deepEqual(extractLinks('看 [需求 Spec](https://x.feishu.cn/docx/AbC123) 和 https://github.com/a/b/pull/3'), [
@@ -9,6 +9,16 @@ test('extract: markdown links keep their text, bare URLs have none', () => {
         { url: 'https://github.com/a/b/pull/3', text: null },
     ]);
     assert.deepEqual(extractLinks('[https://a.com/x](https://a.com/x)'), [{ url: 'https://a.com/x', text: null }], 'text equal to url is no text');
+});
+
+test('localPath: file links give their path, URLs give null', () => {
+    assert.equal(localPath('/root/code/seed/x'), '/root/code/seed/x');
+    assert.equal(localPath('web/app.js#L12'), 'web/app.js:12');
+    assert.equal(localPath('./a.js#L3-L9'), './a.js:3-9');
+    assert.equal(localPath('/tmp/%E8%84%9A%E6%9C%AC.sh'), '/tmp/脚本.sh');
+    assert.equal(localPath('file:///Users/a/b.md'), '/Users/a/b.md');
+    assert.equal(localPath('C:\\work\\a.txt'), 'C:\\work\\a.txt');
+    for (const url of ['https://a.com/x', 'mailto:a@b.c', '//cdn.com/x', '#top', '', null]) assert.equal(localPath(url), null, String(url));
 });
 
 test('extract: code is skipped, only http(s), trailing punctuation dropped', () => {

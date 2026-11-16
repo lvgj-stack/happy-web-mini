@@ -3,6 +3,7 @@
 import { Marked } from './node_modules/marked/lib/marked.esm.js';
 import DOMPurify from './node_modules/dompurify/dist/purify.es.mjs';
 import hljs from './node_modules/@highlightjs/cdn-assets/es/highlight.min.js';
+import { localPath } from './links.js';
 
 const marked = new Marked({ gfm: true, breaks: true });
 
@@ -32,6 +33,18 @@ marked.use({
 
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     if (node.tagName === 'A' && node.hasAttribute('href')) {
+        // A link to a file on the agent's machine cannot open here: clicking copies its path (app.js).
+        const path = localPath(node.getAttribute('href'));
+        if (path) {
+            node.removeAttribute('href');
+            node.removeAttribute('target');
+            node.className = 'path-link';
+            node.dataset.path = path;
+            node.title = `${path}\n点击复制路径`;
+            node.setAttribute('role', 'button');
+            node.setAttribute('tabindex', '0');
+            return;
+        }
         node.setAttribute('target', '_blank');
         node.setAttribute('rel', 'noopener noreferrer');
     }

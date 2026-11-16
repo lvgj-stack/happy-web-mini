@@ -3632,6 +3632,19 @@ $('input').addEventListener('input', () => { autosize(); renderSlash(); renderAc
 $('input').addEventListener('click', renderSlash);
 $('input').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('input')) hideSlash(); }, 0));
 handleCopyClicks($('scroll'));
+// File links in agent text (see markdown.js): the file is on the agent's machine, so copy its path.
+async function copyPathLink(e) {
+    const link = e.target.closest?.('.path-link');
+    if (!link || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    e.stopPropagation(); // e.g. don't toggle a folded turn
+    if (!(await copyText(link.dataset.path))) { notice('复制失败'); return; }
+    clearTimeout(link._reset);
+    link.classList.add('copied');
+    link._reset = setTimeout(() => link.classList.remove('copied'), 1500);
+}
+$('scroll').addEventListener('click', copyPathLink);
+$('scroll').addEventListener('keydown', copyPathLink);
 $('scroll').addEventListener('click', (e) => {
     const option = e.target.closest?.('.md-option');
     if (!option) return;
