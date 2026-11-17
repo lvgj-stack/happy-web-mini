@@ -1862,7 +1862,9 @@ function fillBackground(node, thread, tasks) {
         all.type = 'button';
         all.title = 'Happy 收不到 agent 忙的时候结束的后台任务，结束了也会一直留在这里';
         all.onclick = () => dismissBackground(thread, tasks.map((t) => t.id));
-        list.append(el('li', null, all));
+        const item = el('li');
+        item.append(all);
+        list.append(item);
     }
     node.replaceChildren(head, list);
     tickBackground(node);
