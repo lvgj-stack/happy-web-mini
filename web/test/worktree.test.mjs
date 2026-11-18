@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, readWorktreeDefault, removeWorktree, repoOf, setWorktreeDefault, worktreeOf, worktreeSelection } from '../worktree.js';
+import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeOf, worktreeSelection } from '../worktree.js';
 
 /** The daemon's `bash` RPC, locally: same result shape. */
 const bash = (command, cwd) => new Promise((resolve) => {
@@ -134,6 +134,45 @@ test('a detached worktree: no branch is touched', async () => {
     await bash('git branch loose', repo); // same name as the folder, must survive
     assert.deepEqual(await removeWorktree(path, bash), { branch: null, branchDeleted: false, branchError: '' });
     assert.equal((await bash('git branch --list loose', repo)).stdout.trim(), 'loose');
+});
+
+test('restoreWorktree: a removed worktree whose branch was kept comes back on that branch', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.2));
+    await git('commit -q --allow-empty -m kept-work', made.path);
+    await removeWorktree(made.path, bash); // unmerged: branch kept
+    assert.ok(!existsSync(made.path));
+    assert.deepEqual(await restoreWorktree(join(made.path, 'sub'), bash), { path: made.path, branch: made.branch, branchCreated: false });
+    assert.equal((await bash('git branch --show-current', made.path)).stdout.trim(), made.branch);
+    assert.equal((await bash('git log -1 --format=%s', made.path)).stdout.trim(), 'kept-work');
+});
+
+test('restoreWorktree: a merged (deleted) branch is made again from the main checkout', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.25));
+    await removeWorktree(made.path, bash); // merged: branch deleted too
+    assert.deepEqual(await restoreWorktree(made.path, bash), { path: made.path, branch: made.branch, branchCreated: true });
+    assert.equal((await bash('git branch --show-current', made.path)).stdout.trim(), made.branch);
+});
+
+test('restoreWorktree: a folder deleted by hand (git still lists it) is pruned and made again', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.15));
+    rmSync(made.path, { recursive: true, force: true });
+    assert.equal((await restoreWorktree(made.path, bash)).branchCreated, false);
+    assert.ok(existsSync(made.path));
+});
+
+test('restoreWorktree: a Windows daemon gets one plain git command per step', async () => {
+    const made = await createWorktree(repo, bash, fixed(0.1));
+    await removeWorktree(made.path, bash);
+    const calls = [];
+    const logged = (command, cwd) => { calls.push(command); return bash(command, cwd); };
+    assert.equal((await restoreWorktree(made.path, logged, { windows: true })).branchCreated, true);
+    assert.deepEqual(calls, ['git worktree prune', `git rev-parse --verify --quiet refs/heads/${made.branch}`,
+        `git worktree add -b ${made.branch} .dev/worktree/${made.branch}`]);
+});
+
+test('restoreWorktree: not a worktree path, or git failing: an error that says why', async () => {
+    await assert.rejects(restoreWorktree(join(repo, 'sub'), bash), /不是 worktree/);
+    await assert.rejects(restoreWorktree(join(root, 'nope', '.dev/worktree/x'), bash), /.+/);
 });
 
 test('readWorktreeDefault / setWorktreeDefault keep the choice, directory by default', () => {

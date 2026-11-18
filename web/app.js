@@ -20,11 +20,12 @@ import { AGENT_NAMES, agentFlavor, agentIconSvg } from './agentIcons.js';
 import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
-import { resumeAvailability, resumeFallback, resumeFailure } from './resume.js';
+import { resumeAvailability, resumeDirectoryGone, resumeFailure, resumeFallback } from './resume.js';
+import { forkAvailability, forkCopyRequest, forkSpawnParams } from './fork.js';
 import { messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
-import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, repoOf, setWorktreeDefault, worktreeOf, worktreeSelection } from './worktree.js';
+import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeOf, worktreeSelection } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
@@ -1179,17 +1180,78 @@ async function resumeSession(s) {
             if (typeof mode.model === 'string') params.model = mode.model;
             if (typeof mode.permissionMode === 'string') params.permissionMode = mode.permissionMode;
         } catch { /* the daemon falls back to the session's own */ }
-        const r = await machineRpc(m, 'resume-happy-session', params);
+        let r = await machineRpc(m, 'resume-happy-session', params);
+        let rebuilt = null;
+        if (resumeDirectoryGone(r) && worktreeOf(s.meta.path || '')) {
+            // Its directory is gone, usually a worktree deleted on archiving: put it back, then try again.
+            rebuilt = await bringBackWorktree(m, s.meta.path);
+            r = await machineRpc(m, 'resume-happy-session', params);
+        }
         const failed = resumeFailure(r);
         if (failed) throw new Error(failed);
         if (!(await waitUntilBack(s))) throw new Error('电脑已经在恢复，但会话还没有连上，稍后再看看');
-        notice('');
+        notice(rebuilt ? `已重建 worktree「${rebuilt.branch}」并恢复会话` + (rebuilt.branchCreated ? '（原分支已经删了，从主分支新建）' : '') : '');
     } catch (e) {
         notice(`恢复失败：${e.message}`);
     } finally {
         s.resuming = false;
         renderList();
         if (s === state.current) renderHead();
+    }
+}
+
+/**
+ * A session's directory is gone: when it was a `.dev/worktree/*` checkout, make
+ * it again at the same path on its computer (see worktree.js restoreWorktree).
+ * Resolves to { path, branch, branchCreated }; throws for any other directory.
+ */
+async function bringBackWorktree(m, path) {
+    if (!worktreeOf(path || '')) throw new Error(`会话所在的目录已经不在了：${shortHome(path || '', m.meta.homeDir)}`);
+    const name = worktreeOf(path).split('/').pop();
+    notice(`worktree「${name}」已经删了，正在重建…`);
+    try {
+        return await restoreWorktree(path, (command, cwd) => machineBash(m, command, cwd), { windows: m.meta.platform === 'win32' });
+    } catch (e) {
+        throw new Error(`worktree「${name}」已经删了，重建失败：${e.message}`);
+    }
+}
+
+// ---------- Fork ----------
+
+/** A new session starting from a copy of this one's conversation, on the same computer and directory; then open it. */
+async function forkSession(s) {
+    if (!s || s.forking) return;
+    s.forking = true;
+    try {
+        const m = (await refreshMachines(true)).find((x) => x.id === s.meta.machineId) ?? null;
+        const a = forkAvailability(s, m);
+        if (!a.ok) throw new Error(a.reason || '现在无法 fork');
+        notice('正在 fork…');
+        const copy = forkCopyRequest(s);
+        const c = await machineRpc(m, copy.method, copy.params).catch((e) => {
+            throw new Error(/daemon 没有响应/.test(e.message) ? '这台电脑上的 happy 版本太旧（不支持 fork），或者 daemon 没有响应' : e.message);
+        });
+        // A daemon handler that throws answers { error } (happy-cli RpcHandlerManager), e.g. no JSONL on that computer.
+        if (typeof c?.error === 'string') throw new Error(/session file not found/i.test(c.error) ? '这台电脑上找不到这个会话的对话记录' : c.error);
+        const newId = c?.[copy.resultKey];
+        if (c?.type !== 'success' || !newId) throw new Error(c?.errorMessage || '复制对话失败');
+        const params = forkSpawnParams(s, newId);
+        let r = await machineRpc(m, 'spawn-happy-session', params);
+        if (r?.type === 'requestToApproveDirectoryCreation') {
+            // An archived session's worktree may be gone: the fork runs where it ran, so put it back.
+            await bringBackWorktree(m, s.meta.path);
+            r = await machineRpc(m, 'spawn-happy-session', params);
+        }
+        if (r?.type === 'requestToApproveDirectoryCreation') throw new Error('会话所在的目录已经不在了');
+        if (r?.type === 'error' || typeof r?.error === 'string') throw new Error(r.errorMessage || r.message || r.error || '启动失败');
+        if (r?.type !== 'success' || !r.sessionId) throw new Error('电脑返回了无法识别的结果');
+        const forked = await waitForSession(r.sessionId);
+        notice(forked ? '' : 'fork 出来的会话已经启动，稍后会出现在列表里。');
+        if (forked && !document.body.classList.contains('in-settings')) openSession(forked);
+    } catch (e) {
+        notice(`fork 失败：${/webhook timeout/i.test(e.message) ? '电脑上的 happy 15 秒内没有启动好，再试一次' : e.message}`);
+    } finally {
+        s.forking = false;
     }
 }
 
@@ -3090,6 +3152,11 @@ function sessionMenu(s) {
         { label: '复制会话 ID', icon: 'copy', action: () => copyFromMenu(s.id) },
         '-',
         { label: s.resuming ? '正在恢复…' : '恢复会话', icon: 'resume', hidden: !isDisconnected(s) || !resumeAvailability(s, machineOf(s)).show, disabled: s.resuming || !resumeAvailability(s, machineOf(s)).ok, action: () => resumeSession(s) },
+        (() => {
+            // Until the computers are known, offer it; forkSession checks again with fresh ones.
+            const f = forkAvailability(s, machineOf(s) ?? (state.machines ? null : { online: true }));
+            return { label: s.forking ? '正在 fork…' : 'Fork 会话', icon: 'fork', hidden: !f.show, disabled: s.forking || !f.ok, action: () => forkSession(s) };
+        })(),
         { label: s.archiving ? '正在归档…' : '归档', icon: 'archive', danger: true, hidden: archived, disabled: s.archiving, action: () => archiveSession(s) },
     ];
 }
@@ -3126,7 +3193,7 @@ function groupMenu(head) {
 $('list').addEventListener('contextmenu', (e) => {
     const r = e.target.closest('.row');
     const s = r && state.sessions.get(r.dataset.id);
-    if (s && isDisconnected(s)) refreshMachines().catch((err) => console.error(err)); // for 恢复会话 next time, if stale now
+    if (s) refreshMachines().catch((err) => console.error(err)); // for 恢复会话 / Fork 会话 next time, if stale now (cached 15s)
     if (s) return openMenu(e, sessionMenu(s), r);
     const head = e.target.closest('.group-head, .tree-head');
     if (head) openMenu(e, groupMenu(head), head);

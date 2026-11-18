@@ -143,3 +143,47 @@ export async function removeWorktree(path, bash, { force = false } = {}) {
     const b = await bash(`git branch -d ${quote(branch)}`, base);
     return { branch, branchDeleted: b.success, branchError: b.success ? '' : `${b.stderr}`.trim() };
 }
+
+/**
+ * Put back a deleted `.dev/worktree/<name>` checkout at the same path, so an
+ * archived session that ran in it can be resumed there (the daemon refuses a
+ * session whose directory is gone; Claude keeps its transcript by path, so the
+ * same path picks the conversation up again). Its branch is checked out again
+ * when it is still there; one that went with the checkout (merged) is made
+ * again from the main checkout. Resolves to { path, branch, branchCreated }.
+ */
+export async function restoreWorktree(path, bash, { windows = false } = {}) {
+    const dir = worktreeOf(path);
+    if (!dir) throw new Error('会话所在的目录不是 worktree，没法重建');
+    const base = repoOf(dir);
+    const name = dir.slice(dir.lastIndexOf('/') + 1);
+    const rel = `${WORKTREE_DIR}/${name}`;
+    const fail = (r) => {
+        const why = `${r.stderr}`.trim();
+        if (/not a git repository|No such file or directory|cannot change to/i.test(why)) throw new Error(`仓库 ${base} 不在了，没法重建 worktree`);
+        throw new Error(why || '重建 worktree 失败');
+    };
+    if (windows) {
+        const prune = await bash('git worktree prune', base);
+        if (!prune.success) fail(prune);
+        const has = (await bash(`git rev-parse --verify --quiet refs/heads/${name}`, base)).success;
+        const r = await bash(has ? `git worktree add ${rel} ${name}` : `git worktree add -b ${name} ${rel}`, base);
+        if (!r.success) fail(r);
+        return { path: dir, branch: name, branchCreated: !has };
+    }
+    // POSIX sh, one round trip: prints `kept` or `created`. `prune` first, so a
+    // folder deleted by hand (git still lists it) does not block the add.
+    const script = [
+        `cd ${quote(base)} || exit 1`,
+        'git worktree prune || exit 1',
+        `if git rev-parse --verify --quiet ${quote(`refs/heads/${name}`)} >/dev/null; then`,
+        `  git worktree add ${quote(rel)} ${quote(name)} >&2 && echo kept`,
+        'else',
+        `  git worktree add -b ${quote(name)} ${quote(rel)} >&2 && echo created`,
+        'fi',
+    ].join('\n');
+    const r = await bash(script, base);
+    const out = `${r.stdout}`.trim();
+    if (!r.success || (out !== 'kept' && out !== 'created')) fail(r);
+    return { path: dir, branch: name, branchCreated: out === 'created' };
+}

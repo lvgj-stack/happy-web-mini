@@ -52,9 +52,17 @@ export function resumeFailure(r) {
     if (why) {
         // happy-cli resumeSessionAttempt: `fs.access(cwd)` before spawning
         const gone = /ENOENT[^']*'([^']+)'/.exec(why);
-        return gone ? `会话所在的目录已经不在了（${gone[1]}）` : why;
+        if (gone) return `会话所在的目录已经不在了（${gone[1]}）`;
+        // happy-cli resumeConflict: a CLI from before the daemon restarted may still own it.
+        if (/running process from a previous daemon/.test(why)) return '上一个 daemon 留下的会话进程可能还在跑，等它退出（或在电脑上结束它）后再试';
+        return why;
     }
     if (r?.type === 'requestToApproveDirectoryCreation') return '会话所在的目录已经不在了';
     if (r?.type !== 'success') return '电脑返回了无法识别的结果';
     return '';
+}
+
+/** Whether a `resume-happy-session` answer says the session's directory is gone (worth rebuilding a worktree for). */
+export function resumeDirectoryGone(r) {
+    return r?.type === 'requestToApproveDirectoryCreation' || (typeof r?.error === 'string' && /ENOENT/.test(r.error));
 }
