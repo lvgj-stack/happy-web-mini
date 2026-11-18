@@ -7,12 +7,14 @@ Mac 应用（Electron）的开发规范。仓库级的规范（worktree、提交
 
 这里是一层薄壳：窗口里跑的就是 `../web` 的页面，功能都在网页里。只有 Mac 应用才需要的东西放这里：
 原生菜单、Dock 角标和跳动、系统通知、窗口位置、单实例、关窗不退出、外链用默认浏览器打开。
+还有浏览器白给、Electron 没有的东西，要补上才和网页版打平：右键菜单（`contextMenuItems`）、拼写检查、
+存储图片时给 blob 起个文件名（`nameDownloads`）。⌘F 查找写在网页里（`../web/find.js`），菜单只发命令。
 
 一个功能网页上也该有的，写在 `web/`，不要在这里另写一份。
 
 ## 文件
 
-- `main.js` — 主进程（CommonJS）：`app://happy/` 协议、窗口、菜单、Dock 角标、通知、页面能用的 IPC
+- `main.js` — 主进程（CommonJS）：`app://happy/` 协议、窗口、菜单、右键菜单、Dock 角标、通知、页面能用的 IPC
 - `preload.js` — 页面能调用的**全部**接口，挂在 `window.happyDesktop` 上
 - `../web/desktop.js` — 页面这一侧：算角标数、决定什么时候发通知，网页和 Mac 应用共用，测试在 `../web/test/desktop.test.mjs`
 - `smoke.js` — 冒烟测试
@@ -27,6 +29,12 @@ Mac 应用（Electron）的开发规范。仓库级的规范（worktree、提交
 - 窗口只加载 `app://happy/`。页面里的 `http(s)` / `mailto` 链接和新窗口交给 `shell.openExternal`，在默认浏览器里打开；
   聊天图片在单独的小窗口里打开，同样是 sandbox。
 - 页面发的请求不带凭据，所以 `relaxCors` 只给没有 CORS 头的响应补 `Access-Control-Allow-Origin: *`，别扩大到别的头。
+
+## 和网页版打平
+
+网页在浏览器里能用的，Mac 应用里也要能用；反过来 Mac 应用有的，网页能做到的也要有（比如测试通知，网页在 设置 › 通知 里有按钮）。
+加功能时想一下浏览器替网页做了什么（右键、查找、拼写、下载、后退……），Electron 里是不是也有。
+页面要知道自己在不在 Mac 应用里，看 `desktop.active`，别靠 UA。
 
 ## 加一个桥接接口
 

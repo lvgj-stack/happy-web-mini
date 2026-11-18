@@ -118,6 +118,25 @@ export async function setNotifications(on) {
     return 'on';
 }
 
+export const TEST_NOTIFICATION = { title: 'Happy', body: '测试通知：看到这条，说明通知正常。' };
+
+/**
+ * 设置 › 通知 › 发送测试通知, the same as the Mac app's 帮助 › 发送测试通知
+ * (there the app itself explains when the system drops it).
+ * @returns {'sent'|'off'|'failed'}
+ */
+export function testNotification() {
+    const app = globalThis.window?.happyDesktop;
+    if (app) { app.testNotify?.(); return 'sent'; }
+    if (!notificationsOn()) return 'off';
+    try {
+        new Notification(TEST_NOTIFICATION.title, { body: TEST_NOTIFICATION.body, icon: 'favicon.svg', silent: !notifySoundOn() });
+        return 'sent';
+    } catch {
+        return 'failed';
+    }
+}
+
 /** System notifications from the page itself; a click brings the tab forward and opens the session. */
 export function browserNotifier() {
     let open = null;

@@ -6,7 +6,7 @@
 const { app, ipcMain, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { resolveAsset, WEB_ROOT } = require('./main.js');
+const { resolveAsset, contextMenuItems, WEB_ROOT } = require('./main.js');
 
 const out = process.env.SMOKE_OUT || path.join(__dirname, 'smoke-out');
 fs.mkdirSync(out, { recursive: true });
@@ -77,17 +77,55 @@ app.on('browser-window-created', (_e, win) => {
         await wc.executeJavaScript(`window.happyDesktop.setBadge(3); window.happyDesktop.notify({ id: 'x', title: 't', body: 'b' })`);
         await new Promise((r) => setTimeout(r, 300));
         check(got.badge === 3 && got.notify?.id === 'x', 'badge and notification reach the app');
+        // 设置 › 发送测试通知: swap the app's handler for ours so no real notification or dialog appears.
+        ipcMain.removeAllListeners('desktop:test-notify');
+        ipcMain.on('desktop:test-notify', () => { got.test = true; });
+        await wc.executeJavaScript(`window.happyDesktop.testNotify()`);
+        await new Promise((r) => setTimeout(r, 200));
+        check(got.test === true, 'test notification from settings reaches the app');
+
+        // Right-click menu like a browser's; spell check on.
+        check(wc.listenerCount('context-menu') > 0, 'right-click menu is wired');
+        const labels = (p) => contextMenuItems(wc, { editFlags: {}, selectionText: '', ...p }).map((i) => i.label);
+        check(labels({ isEditable: true, editFlags: { canPaste: true } }).includes('粘贴'), 'right-click in the composer offers paste');
+        check(labels({ selectionText: 'hello' }).includes('拷贝'), 'right-click on selected text offers copy');
+        check(labels({ mediaType: 'image', srcURL: 'blob:app://happy/x' }).includes('存储图片…'), 'right-click on an image offers save');
+        check(labels({ linkURL: 'https://happy.engineering' }).includes('拷贝链接'), 'right-click on a link offers copy link');
+        check(labels({}).length === 0, 'right-click on nothing shows no empty menu');
+        check(wc.session.isSpellCheckerEnabled(), 'spell check is on');
 
         // Menus: app -> page.
         const items = [];
         const walk = (m) => m.items.forEach((i) => { items.push(i); if (i.submenu) walk(i.submenu); });
         walk(Menu.getApplicationMenu());
         const byKey = (k) => items.find((i) => i.accelerator === k);
-        check(['CmdOrCtrl+N', 'CmdOrCtrl+,', 'CmdOrCtrl+B'].every(byKey) && items.some((i) => i.role === 'paste'), 'menus have New, Settings, Sidebar and Edit');
+        check(['CmdOrCtrl+N', 'CmdOrCtrl+,', 'CmdOrCtrl+B', 'CmdOrCtrl+F', 'CmdOrCtrl+G'].every(byKey) && items.some((i) => i.role === 'paste'), 'menus have New, Settings, Sidebar, Find and Edit');
         byKey('CmdOrCtrl+B').click();
         await new Promise((r) => setTimeout(r, 200));
         check(await wc.executeJavaScript(`document.body.classList.contains('side-collapsed')`), 'View > Toggle Sidebar collapses the sidebar');
         byKey('CmdOrCtrl+B').click();
+
+        // Edit > Find (⌘F): the page's own find bar, highlights, Esc closes.
+        byKey('CmdOrCtrl+F').click();
+        await new Promise((r) => setTimeout(r, 200));
+        const found = await wc.executeJavaScript(`(() => {
+            const input = document.getElementById('find-input');
+            const open = !document.getElementById('find-bar').hidden && document.activeElement === input;
+            input.value = '重构';
+            input.dispatchEvent(new Event('input'));
+            return { open, count: document.getElementById('find-count').textContent, painted: CSS.highlights.has('find-match') };
+        })()`);
+        check(found.open && found.count === '1/1' && found.painted, `Edit > Find opens the find bar and finds (${found.count})`);
+        await new Promise((r) => setTimeout(r, 300));
+        fs.writeFileSync(path.join(out, 'find.png'), (await wc.capturePage()).toPNG());
+        byKey('CmdOrCtrl+G').click();
+        await new Promise((r) => setTimeout(r, 100));
+        const closed = await wc.executeJavaScript(`(() => {
+            document.getElementById('find-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            return document.getElementById('find-bar').hidden && !CSS.highlights.has('find-match');
+        })()`);
+        check(closed, 'Esc closes the find bar and clears highlights');
+
         byKey('CmdOrCtrl+,').click();
         await new Promise((r) => setTimeout(r, 200));
         check(await wc.executeJavaScript(`document.body.classList.contains('in-settings')`), 'Settings… opens settings');

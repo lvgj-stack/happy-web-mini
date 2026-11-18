@@ -19,4 +19,4 @@ xattr -dr com.apple.quarantine /Applications/Happy.app
 
 ## 功能
 
-和网页版一样，另外有原生菜单（⌘, 设置、⌘N 新建会话、⌘B 切换侧栏）、Dock 角标、系统通知、隐藏式标题栏、关窗口不退出、记住窗口位置。详见 [desktop/README.md](https://github.com/lvgj-stack/happy-web-mini/blob/main/desktop/README.md)。
+和网页版一样，另外有原生菜单（⌘, 设置、⌘N 新建会话、⌘B 切换侧栏、⌘F 查找）、像浏览器一样的右键菜单和拼写检查、Dock 角标、系统通知、隐藏式标题栏、关窗口不退出、记住窗口位置。详见 [desktop/README.md](https://github.com/lvgj-stack/happy-web-mini/blob/main/desktop/README.md)。

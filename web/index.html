@@ -107,6 +107,8 @@
   .radio-list { display: flex; flex-direction: column; align-items: flex-start; }
   #notify-hint.warn { color: var(--error); }
   #notify-sound-row:not([hidden]) { display: flex; width: fit-content; margin-left: 24px; }
+  #notify-test { display: flex; margin: 6px 0 2px 24px; padding: 3px 10px; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink); background: var(--sheet); }
+  #notify-test:hover:not(:disabled) { border-color: var(--moss); color: var(--moss); }
   .check:has(input:disabled) { color: var(--muted); cursor: default; }
   .labelled .field { width: auto; min-width: 150px; color: var(--ink); }
   /* 背景: one swatch per choice, the picked one ringed */
@@ -542,6 +544,16 @@
   body.desktop-mac .side-head, body.desktop-mac #chat-head, body.desktop-mac .settings-head { -webkit-app-region: drag; }
   body.desktop-mac :is(button, input, select, textarea, a, summary, [role="separator"]) { -webkit-app-region: no-drag; }
 
+  /* ⌘F in the Mac app (find.js); a browser uses its own find bar */
+  #find-bar { position: fixed; top: 10px; right: 16px; z-index: 150; display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 10px;
+    background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 6px 24px rgba(38, 42, 39, .12); }
+  body.desktop-mac #find-bar { top: 44px; }
+  #find-input { width: 200px; border: 0; outline: 0; background: none; font: 13px/1.6 var(--sans); color: var(--ink); }
+  #find-count { min-width: 3.5em; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+  #find-bar .icon-only svg { width: 16px; height: 16px; }
+  ::highlight(find-match) { background-color: #F3E38A; color: inherit; }
+  ::highlight(find-current) { background-color: #F0A64A; color: inherit; }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
     .spin { animation: spin 2.4s linear infinite !important; } /* still shows it is busy, gently */
@@ -644,6 +656,7 @@
         <h3>通知</h3>
         <label class="check"><input type="checkbox" id="notify-toggle"> 任务完成或等你回答时发系统通知</label>
         <label class="check" id="notify-sound-row" hidden><input type="checkbox" id="notify-sound"> 通知带提示音</label>
+        <button id="notify-test" class="quiet" type="button">发送测试通知</button>
         <p class="hint" id="notify-hint">只在这个标签页不在前台时通知，点通知直接打开那个会话。只对这个浏览器生效，页面要开着。</p>
       </div>
       <h3>新建会话</h3>
@@ -701,6 +714,13 @@
   </form>
 </dialog>
 
+<div id="find-bar" role="search" hidden>
+  <input id="find-input" type="text" placeholder="查找" spellcheck="false" autocomplete="off" aria-label="查找">
+  <span id="find-count" aria-live="polite"></span>
+  <button id="find-prev" class="icon-only" type="button" title="上一个（⇧⌘G）" aria-label="上一个"></button>
+  <button id="find-next" class="icon-only" type="button" title="下一个（⌘G）" aria-label="下一个"></button>
+  <button id="find-close" class="icon-only" type="button" title="关闭（Esc）" aria-label="关闭"></button>
+</div>
 <script src="node_modules/tweetnacl/nacl-fast.min.js"></script>
 <script src="node_modules/qrcode-generator/qrcode.js"></script>
 <script type="module" src="app.js"></script>

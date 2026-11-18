@@ -5,7 +5,7 @@
 // The page is served from app://happy/, a standard secure scheme, so ES
 // modules, crypto.subtle and localStorage behave as they do on https.
 
-const { app, BrowserWindow, Menu, Notification, dialog, ipcMain, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -125,7 +125,7 @@ function createWindow() {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
-            spellcheck: false,
+            spellcheck: true, // as in a browser: misspellings underlined, fixes in the right-click menu
         },
     });
     win.once('ready-to-show', () => win.show());
@@ -161,6 +161,72 @@ function createWindow() {
 
     win.loadURL(ORIGIN + '/index.html');
     return win;
+}
+
+// ---------- Right-click menu and saving ----------
+// A browser gives every page a right-click menu (copy, paste, open link, save
+// image); Electron gives none. This is that menu, for the main window and the
+// image viewer. Where the page has its own (the sidebar) it cancels the event
+// and this never fires.
+
+const EXTERNAL = /^(https?|mailto):/;
+
+/** The browser-style items for one right-click; empty when there is nothing to offer. */
+function contextMenuItems(wc, p) {
+    const items = [];
+    const sep = () => { if (items.length && items[items.length - 1].type !== 'separator') items.push({ type: 'separator' }); };
+    if (p.misspelledWord) {
+        for (const word of (p.dictionarySuggestions || []).slice(0, 5)) items.push({ label: word, click: () => wc.replaceMisspelling(word) });
+        if (!items.length) items.push({ label: '没有拼写建议', enabled: false });
+        items.push({ label: '学习拼写', click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+        sep();
+    }
+    if (p.linkURL && EXTERNAL.test(p.linkURL)) {
+        items.push({ label: '在浏览器中打开链接', click: () => shell.openExternal(p.linkURL) });
+        items.push({ label: p.linkURL.startsWith('mailto:') ? '拷贝邮件地址' : '拷贝链接', click: () => clipboard.writeText(p.linkURL.replace(/^mailto:/, '')) });
+        sep();
+    }
+    if (p.mediaType === 'image' && p.srcURL) {
+        items.push({ label: '拷贝图片', click: () => wc.copyImageAt(p.x, p.y) });
+        items.push({ label: '存储图片…', click: () => wc.downloadURL(p.srcURL) });
+        sep();
+    }
+    const f = p.editFlags || {};
+    if (p.isEditable) {
+        items.push({ role: 'cut', label: '剪切', enabled: !!f.canCut });
+        items.push({ role: 'copy', label: '拷贝', enabled: !!f.canCopy });
+        items.push({ role: 'paste', label: '粘贴', enabled: !!f.canPaste });
+        items.push({ role: 'selectAll', label: '全选', enabled: !!f.canSelectAll });
+    } else if (p.selectionText && p.selectionText.trim()) {
+        items.push({ role: 'copy', label: '拷贝' });
+    }
+    if (isMac && p.selectionText && p.selectionText.trim()) {
+        sep();
+        const word = p.selectionText.trim();
+        items.push({ label: `查询“${word.length > 20 ? word.slice(0, 20) + '…' : word}”`, click: () => wc.showDefinitionForSelection() });
+    }
+    while (items.length && items[items.length - 1].type === 'separator') items.pop();
+    return items;
+}
+
+function browserLikeContents(wc) {
+    wc.on('context-menu', (_e, p) => {
+        const items = contextMenuItems(wc, p);
+        if (items.length) Menu.buildFromTemplate(items).popup({ window: BrowserWindow.fromWebContents(wc) ?? undefined });
+    });
+}
+
+const IMAGE_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg' };
+
+// 存储图片…: decrypted images are blob: URLs with no name; give the save dialog a sensible one.
+function nameDownloads() {
+    session.defaultSession.on('will-download', (_e, item) => {
+        const name = item.getFilename();
+        if (item.getURL().startsWith('blob:') || !/\.[a-z0-9]{2,5}$/i.test(name)) {
+            const ext = IMAGE_EXT[item.getMimeType()] || 'png';
+            item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), `Happy 图片.${ext}`) });
+        }
+    });
 }
 
 // ---------- Page bridge ----------
@@ -234,6 +300,7 @@ function bridge() {
     ipcMain.on('desktop:attention', () => bounceDock());
     ipcMain.on('desktop:notify', (_e, note) => { showNotification(note); });
     ipcMain.on('desktop:notify-sound', (_e, on) => { notifySilent = !on; });
+    ipcMain.on('desktop:test-notify', () => { testNotification(); });
 }
 
 // ---------- Menus ----------
@@ -277,6 +344,16 @@ function buildMenu() {
                 { role: 'paste', label: '粘贴' },
                 { role: 'pasteAndMatchStyle', label: '粘贴并匹配样式' },
                 { role: 'selectAll', label: '全选' },
+                { type: 'separator' },
+                {
+                    label: '查找',
+                    submenu: [
+                        { label: '查找…', accelerator: 'CmdOrCtrl+F', click: command('find') },
+                        { label: '查找下一个', accelerator: 'CmdOrCtrl+G', click: command('find-next') },
+                        { label: '查找上一个', accelerator: 'Shift+CmdOrCtrl+G', click: command('find-previous') },
+                        { label: '用所选内容查找', accelerator: 'CmdOrCtrl+E', click: command('find-selection') },
+                    ],
+                },
             ],
         },
         {
@@ -328,6 +405,7 @@ if (!app.requestSingleInstanceLock()) {
     app.on('before-quit', () => { quitting = true; });
     app.on('activate', () => showWindow());
     app.on('window-all-closed', () => { if (!isMac) app.quit(); });
+    app.on('web-contents-created', (_e, wc) => browserLikeContents(wc));
     app.whenReady().then(() => {
         // build.mjs records which commit of the page went in; dev runs have none.
         let info = null;
@@ -336,10 +414,11 @@ if (!app.requestSingleInstanceLock()) {
         app.setAboutPanelOptions({ applicationName: 'Happy', applicationVersion: app.getVersion(), version, copyright: 'happy-web-mini' });
         serveAssets();
         relaxCors();
+        nameDownloads();
         bridge();
         buildMenu();
         createWindow();
     });
 }
 
-module.exports = { resolveAsset, WEB_ROOT, ORIGIN };
+module.exports = { resolveAsset, contextMenuItems, WEB_ROOT, ORIGIN };

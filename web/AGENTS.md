@@ -34,6 +34,8 @@
   `happy.linksHidden`、`happy.links.<会话 id>`、`happy.lines.<会话 id>`，以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
   `happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
   `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
+- 已读：正在看的会话，标签页可见、不在设置页、并且窗口有焦点（`document.hasFocus()`）才算看过（`viewing()`），网页和 Mac 应用一样；
+  窗口重新拿到焦点（`focus`）时补标已读。
 - **从会话里解密出来的内容**（链接、文件路径之类）按会话缓存时，退出登录要清掉：加到 `logout()` 里按前缀删除的那一行。
 - 读缓存要容错：用 `try/catch` 包住 `JSON.parse`，带上版本号 `v`，格式不对就当作没有缓存，重新算。
   写缓存也包 `try/catch`（配额可能满了，背景图本身就占 1.5 MB 左右）。
@@ -119,6 +121,13 @@
 - 改动行数（`lines.js`）：后台一次一个会话地同步所有在线会话加上正在看的那个（`wantLines` / `runLines`）。
   先用 `after_seq` 补新消息，再用 `before_seq` 往前扫到头；有刚打开的会话在排队时，往前扫的会话每翻一页就让一次。
   推送来的消息 seq 正好接上就直接累加，接不上就排队同步。失败后一分钟内不重试。缓存在 `happy.lines.<id>`。
+
+## Mac 应用里才有的界面
+
+- 页面在不在 Mac 应用里看 `desktop.active`（`desktop.js`）。浏览器自带、Electron 没有的东西要在两边打平，规范见 `../desktop/AGENTS.md` 的「和网页版打平」。
+- ⌘F 查找（`find.js`）：只由 Mac 菜单的 `find` / `find-next` / `find-previous` / `find-selection` 命令打开，浏览器里不拦 ⌘F。
+  用 CSS Custom Highlight API 画高亮，不改 DOM；不用 Electron 的 `findInPage`，它会连查找框里的字也匹配上。
+  打开期间用 `MutationObserver` 跟着新消息重新计数（忽略查找栏自己的变化，否则会死循环）。
 
 ## 测试和验证
 

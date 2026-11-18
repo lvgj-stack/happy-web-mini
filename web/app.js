@@ -10,11 +10,12 @@ import { renderInlineMarkdown, renderMarkdown } from './markdown.js';
 import { splitOptions } from './options.js';
 import { addCopyButtons, copyText, handleCopyClicks } from './clipboard.js';
 import { openMenu } from './contextmenu.js';
+import { createFinder } from './find.js';
 import { answerCall, canSubmit, declineCall, pendingQuestions, toggle } from './questions.js';
 import { approvalCall, canApproveForSession, describeApproval, pendingApprovals } from './approvals.js';
 import { agentPermissionOptions, permissionOptions } from './permissions.js';
 import { fileEvent, imageUrl, prepareImage, rememberImage, uploadImage } from './attachments.js';
-import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound } from './desktop.js';
+import { desktop, notificationsOn, notificationsSupported, notifySoundOn, setNotifications, setNotifySound, testNotification } from './desktop.js';
 import { describeTool, formatDuration, iconSvg } from './tools.js';
 import { AGENT_NAMES, agentFlavor, agentIconSvg } from './agentIcons.js';
 import { loadBuildInfo, versionText } from './version.js';
@@ -470,8 +471,9 @@ function sessionChanged(s) {
 
 /** The person is looking at this session right now. */
 function viewing(s) {
+    // A window can be visible behind other apps (browser or Mac app): only one in front counts as looked at.
     return s === state.current && document.visibilityState === 'visible' && !document.body.classList.contains('in-settings')
-        && (!desktop.active || document.hasFocus()); // the Mac app's window can be visible behind other apps
+        && document.hasFocus();
 }
 
 function markRead(s) {
@@ -2809,8 +2811,8 @@ function renderSettings() {
     }
 }
 
-const NOTIFY_HINT = '只在这个标签页不在前台时通知，点通知直接打开那个会话。只对这个浏览器生效，页面要开着。';
-const DESKTOP_NOTIFY_HINT = '只在窗口不在前台时通知，点通知直接打开那个会话；等你回答时 Dock 图标还会跳一下。没弹出来的话，用「帮助 › 发送测试通知」检查。Dock 角标不受这个开关影响。';
+const NOTIFY_HINT = '只在这个标签页或浏览器窗口不在前台时通知，点通知直接打开那个会话。只对这个浏览器生效，页面要开着。没弹出来的话，点「发送测试通知」检查，再看看系统设置里有没有允许浏览器发通知。';
+const DESKTOP_NOTIFY_HINT = '只在窗口不在前台时通知，点通知直接打开那个会话；等你回答时 Dock 图标还会跳一下。没弹出来的话，点「发送测试通知」检查（「帮助」菜单里也有）。Dock 角标不受这个开关影响。';
 
 /** Notifications on/off: the same switch in a browser and in the Mac app. */
 function renderNotifySetting(problem) {
@@ -2824,6 +2826,7 @@ function renderNotifySetting(problem) {
     $('notify-sound-row').hidden = !desktop.active;
     $('notify-sound').checked = notifySoundOn();
     $('notify-sound').disabled = !toggle.checked;
+    $('notify-test').disabled = !toggle.checked;
     hint.textContent = !supported ? '这个页面不能发通知：需要用 https 或 localhost 打开（ssh 转发到 localhost 就行）。'
         : blocked || problem === 'denied' ? '浏览器拦掉了这个网站的通知。点地址栏左边的网站设置，把「通知」改成允许，再回来打开。'
         : desktop.active ? DESKTOP_NOTIFY_HINT : NOTIFY_HINT;
@@ -3617,6 +3620,11 @@ $('notify-toggle').addEventListener('change', async () => {
     renderNotifySetting(result);
     if (result === 'on' || result === 'off') settingsSaved();
 });
+$('notify-test').onclick = () => {
+    if (testNotification() !== 'failed') return;
+    $('notify-hint').textContent = '浏览器没能发出测试通知。看看系统设置里有没有允许这个浏览器发通知。';
+    $('notify-hint').classList.add('warn');
+};
 $('notify-sound').addEventListener('change', () => {
     setNotifySound($('notify-sound').checked);
     settingsSaved();
@@ -3631,11 +3639,67 @@ window.addEventListener('focus', () => markRead(state.current));
 // Menu commands and notification clicks from desktop/ (no-ops in a browser).
 if (desktop.platform === 'darwin') document.body.classList.add('desktop-mac');
 desktop.onCommand((name) => {
+    if (name === 'find') openFind();
+    else if (name === 'find-selection') openFind(String(window.getSelection() ?? ''));
+    else if (name === 'find-next' || name === 'find-previous') stepFind(name === 'find-next' ? 'next' : 'prev');
     if ($('app').hidden) return; // signed out: nothing to act on
     if (name === 'new-session') openNewSession();
     else if (name === 'settings') openSettings();
     else if (name === 'toggle-sidebar') setSideCollapsed(!document.body.classList.contains('side-collapsed'));
 });
+// ⌘F / ⌘G / ⇧⌘G / ⌘E from the Mac app's 编辑 › 查找 menu (find.js). A browser keeps its own find bar.
+const finder = createFinder(document.body, $('find-bar'));
+let findWatch = null;
+let findTimer = null;
+$('find-prev').innerHTML = iconSvg('findPrev');
+$('find-next').innerHTML = iconSvg('findNext');
+$('find-close').innerHTML = iconSvg('close');
+
+function showFindState({ label }) {
+    $('find-count').textContent = label;
+}
+
+function openFind(text) {
+    const bar = $('find-bar');
+    const input = $('find-input');
+    if (text) input.value = text.split('\n')[0].slice(0, 200);
+    bar.hidden = false;
+    input.focus();
+    input.select();
+    showFindState(finder.search(input.value));
+    if (!findWatch) {
+        // Messages keep arriving while find is open: recount, keep the place.
+        findWatch = new MutationObserver((records) => {
+            if (records.every((r) => bar.contains(r.target))) return; // its own counter
+            clearTimeout(findTimer);
+            findTimer = setTimeout(() => showFindState(finder.refresh()), 250);
+        });
+        findWatch.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }
+}
+
+function stepFind(dir) {
+    if ($('find-bar').hidden) { openFind(); return; } // reopening lands on the first match, like a browser
+    showFindState(finder.step(dir));
+}
+
+function closeFind() {
+    $('find-bar').hidden = true;
+    findWatch?.disconnect();
+    findWatch = null;
+    clearTimeout(findTimer);
+    finder.clear();
+}
+
+$('find-input').addEventListener('input', () => showFindState(finder.search($('find-input').value)));
+$('find-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); stepFind(e.shiftKey ? 'prev' : 'next'); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+});
+$('find-prev').onclick = () => stepFind('prev');
+$('find-next').onclick = () => stepFind('next');
+$('find-close').onclick = () => closeFind();
+
 desktop.onOpenSession((id) => {
     const s = state.sessions.get(id);
     if (s) openSession(s);

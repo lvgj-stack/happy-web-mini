@@ -11,10 +11,11 @@ const bridge = {
     notify: (n) => calls.push(['notify', n.id, n.body]),
     attention: () => calls.push(['attention']),
     setNotifySound: (on) => calls.push(['sound', on]),
+    testNotify: () => calls.push(['test']),
     onCommand() {}, onOpenSession() {},
 };
 globalThis.window = { happyDesktop: bridge };
-const { createDesktop, notificationsOn, notifySoundOn, setNotifications, setNotifySound } = await import('../desktop.js');
+const { createDesktop, notificationsOn, notifySoundOn, setNotifications, setNotifySound, testNotification } = await import('../desktop.js');
 
 const how = (unread, asking, focused = false) => ({
     isUnread: (s) => unread.includes(s.id), isAsking: (s) => asking.includes(s.id), title: (s) => s.id.toUpperCase(), focused,
@@ -89,4 +90,9 @@ test('Mac app: notifications make a sound by default; the switch silences them a
     setNotifySound(true);
     assert.equal(notifySoundOn(), true);
     assert.deepEqual(calls.at(-1), ['sound', true]);
+});
+
+test('Mac app: 发送测试通知 in settings asks the app, which explains a dropped one itself', () => {
+    assert.equal(testNotification(), 'sent');
+    assert.deepEqual(calls, [['test']]);
 });
