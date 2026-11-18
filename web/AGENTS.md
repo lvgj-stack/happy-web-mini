@@ -77,6 +77,8 @@
   Codex 有 `approved_for_session`）、`communication`（Codex / Happy Agent 的提问表单）、`abort`、`bash`、`killSession`（归档）。
 - 机器 RPC：`spawn-happy-session`（新建会话）、`resume-happy-session`（恢复会话，带上会话密钥作为 fallback）、
   `bash`（worktree 的列出 / 新建 / 删除，见 `worktree.js`）。
+- daemon 的 RPC handler 抛错时，回的是 `{ error: "..." }`，不是 `{ type: 'error' }`（happy-cli `RpcHandlerManager.handleRequest`）。
+  恢复会话目录不在时就是这样（`resumeSessionAttempt` 里 `fs.access(cwd)` 抛 ENOENT），`resumeFailure` 两种都认，对照 iOS `MachineActions.machineResumeSession`。
 - 新建会话的 Worktree 选中哪项（`worktreeSelection`）：本次对话框里手动选过且还能选的 → 目录本身就是某个 worktree 时选它 →
   设置里的默认值。手动选择在打开对话框、换电脑、启动成功后清掉，改目录不清（打字过程中不会被重置）。
 - Codex 的模型列表经会话的 `bash` RPC 在那台电脑上查 `codex app-server`（`codexModels.js`），不用升级 Happy CLI。

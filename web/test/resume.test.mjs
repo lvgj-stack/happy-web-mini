@@ -1,7 +1,7 @@
 // node --test: whether a disconnected session can be resumed, and what the daemon is sent.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resumeAvailability, resumeFallback } from '../resume.js';
+import { resumeAvailability, resumeFallback, resumeFailure } from '../resume.js';
 
 const session = (meta = {}, extra = {}) => ({
     id: 's1', active: false, seq: 42, metadataVersion: 7, agentStateVersion: 3,
@@ -47,4 +47,18 @@ test('the fallback carries the session key and versions the daemon reattaches wi
     assert.equal(fresh.seq, 0);
     assert.equal(fresh.metadataVersion, 0);
     assert.equal(fresh.agentStateVersion, 0);
+});
+
+test('a resume answer that failed says why', () => {
+    assert.equal(resumeFailure({ type: 'success', sessionId: 's1' }), '');
+    // What the daemon answers when its handler throws: { error }, not { type: 'error' }
+    assert.equal(
+        resumeFailure({ error: "Failed to resume session: ENOENT: no such file or directory, access '/repo/.dev/worktree/gone'" }),
+        '会话所在的目录已经不在了（/repo/.dev/worktree/gone）',
+    );
+    assert.equal(resumeFailure({ error: 'Session s1 has no metadata. Cannot resume.' }), 'Session s1 has no metadata. Cannot resume.');
+    assert.equal(resumeFailure({ type: 'error', errorMessage: 'busy' }), 'busy');
+    assert.equal(resumeFailure({ type: 'error' }), '恢复失败');
+    assert.equal(resumeFailure({ type: 'requestToApproveDirectoryCreation', directory: '/x' }), '会话所在的目录已经不在了');
+    assert.equal(resumeFailure(null), '电脑返回了无法识别的结果');
 });

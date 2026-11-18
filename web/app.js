@@ -20,7 +20,7 @@ import { AGENT_NAMES, agentFlavor, agentIconSvg } from './agentIcons.js';
 import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
-import { resumeAvailability, resumeFallback } from './resume.js';
+import { resumeAvailability, resumeFallback, resumeFailure } from './resume.js';
 import { messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
@@ -1180,8 +1180,8 @@ async function resumeSession(s) {
             if (typeof mode.permissionMode === 'string') params.permissionMode = mode.permissionMode;
         } catch { /* the daemon falls back to the session's own */ }
         const r = await machineRpc(m, 'resume-happy-session', params);
-        if (r?.type === 'error') throw new Error(r.errorMessage || '恢复失败');
-        if (r?.type === 'requestToApproveDirectoryCreation') throw new Error('会话所在的目录已经不在了');
+        const failed = resumeFailure(r);
+        if (failed) throw new Error(failed);
         if (!(await waitUntilBack(s))) throw new Error('电脑已经在恢复，但会话还没有连上，稍后再看看');
         notice('');
     } catch (e) {
@@ -3363,8 +3363,8 @@ async function submitNewSession(e) {
             if (!confirm(`${r.directory} 不存在，要在这台电脑上创建它吗？`)) return;
             r = await machineRpc(m, 'spawn-happy-session', { ...params, approvedNewDirectoryCreation: true });
         }
-        if (r?.type === 'error') {
-            const why = r.errorMessage || r.message || '启动失败';
+        if (r?.type === 'error' || typeof r?.error === 'string') { // a daemon handler that throws answers { error }
+            const why = r.errorMessage || r.message || r.error || '启动失败';
             // The daemon gives a new CLI 15s to register; a stalled request to the server is the usual cause.
             throw new Error(/webhook timeout/i.test(why) ? '电脑上的 happy 15 秒内没有启动好（通常是它连服务器卡住了），再试一次' : why);
         }

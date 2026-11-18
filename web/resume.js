@@ -40,3 +40,21 @@ export function resumeFallback(s, keyBase64) {
         encryptionVariant: 'dataKey',
     };
 }
+
+/**
+ * What went wrong with a `resume-happy-session` answer, or '' when it worked.
+ * A daemon whose handler throws (directory gone, session not tracked…) answers
+ * `{ error }` rather than `{ type: 'error' }`, as the iOS app expects
+ * (MachineActions.machineResumeSession checks result["error"] first).
+ */
+export function resumeFailure(r) {
+    const why = typeof r?.error === 'string' ? r.error : r?.type === 'error' ? (r.errorMessage || '恢复失败') : '';
+    if (why) {
+        // happy-cli resumeSessionAttempt: `fs.access(cwd)` before spawning
+        const gone = /ENOENT[^']*'([^']+)'/.exec(why);
+        return gone ? `会话所在的目录已经不在了（${gone[1]}）` : why;
+    }
+    if (r?.type === 'requestToApproveDirectoryCreation') return '会话所在的目录已经不在了';
+    if (r?.type !== 'success') return '电脑返回了无法识别的结果';
+    return '';
+}
