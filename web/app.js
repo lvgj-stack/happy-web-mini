@@ -663,7 +663,21 @@ function treeNode(key, kind, icon, name, title, sessions, children) {
     if (sessions.some((s) => waitingSets(s).length)) head.classList.add('asking');
     else if (sessions.some(isUnread)) head.classList.add('unread');
     head.insertAdjacentHTML('beforeend', iconSvg(icon, 14));
-    head.append(el('span', 'name', name), el('span', 'count', String(sessions.length)), el('span', 'mark'), el('span', 'chev'));
+    head.append(el('span', 'name', name), el('span', 'count', String(sessions.length)), el('span', 'mark'));
+    const here = newSessionTarget(sessions, kind === 'worktree');
+    if (here) {
+        // A span, not a button: it sits inside the head's button, which opens or folds the group.
+        const add = el('span', 'tree-new');
+        add.setAttribute('role', 'button');
+        add.tabIndex = 0;
+        add.title = add.ariaLabel = '在这里新建会话';
+        add.innerHTML = iconSvg('plus', 14);
+        const open = (e) => { e.stopPropagation(); e.preventDefault(); openNewSession(here.machineId, here.dir); };
+        add.onclick = open;
+        add.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); };
+        head.append(add);
+    }
+    head.append(el('span', 'chev'));
     head.onclick = () => toggleCollapsed(key);
     const rows = el('div', 'rows');
     rows.append(...children);
@@ -3164,6 +3178,14 @@ function sessionMenu(s) {
     ];
 }
 
+/** Where a project's (or worktree's) 新建会话 starts: its directory on its computer, or null when unknown. */
+function newSessionTarget(sessions, worktree) {
+    const first = sessions[0];
+    const p = first && place(first);
+    const dir = !p ? '' : worktree && p.worktree ? p.projectPath + WORKTREE_MARKER + p.worktree : p.projectPath;
+    return dir && first.meta.machineId ? { machineId: first.meta.machineId, dir } : null;
+}
+
 function groupMenu(head) {
     const box = head.parentElement;
     const sessions = sessionsIn(box);
@@ -3186,8 +3208,9 @@ function groupMenu(head) {
     // A project or one of its worktrees.
     const p = first && place(first);
     const dir = !p ? '' : box.classList.contains('worktree') && p.worktree ? p.projectPath + WORKTREE_MARKER + p.worktree : p.projectPath;
+    const here = newSessionTarget(sessions, box.classList.contains('worktree'));
     return [
-        { label: '在这里新建会话', icon: 'newChat', hidden: !dir || !first.meta.machineId, action: () => openNewSession(first.meta.machineId, dir) },
+        { label: '在这里新建会话', icon: 'newChat', hidden: !here, action: () => openNewSession(here.machineId, here.dir) },
         { label: '复制路径', icon: 'copy', hidden: !dir, action: () => copyFromMenu(dir) },
         read, '-', fold,
     ];

@@ -171,8 +171,15 @@
   .tree-head .mark { display: none; flex: none; width: 6px; height: 6px; border-radius: 50%; }
   .tree.collapsed > .tree-head.unread .mark { display: block; background: var(--moss); }
   .tree.collapsed > .tree-head.asking .mark { display: block; background: #B7791F; }
+  /* 新建会话 in this folder: shown on hover (always on touch), at the right next to the chevron. */
+  .tree-new { display: none; flex: none; align-items: center; justify-content: center; width: 20px; height: 20px; margin: -3px 0 -3px auto; border-radius: 5px; color: var(--muted); }
+  .tree-new:hover, .tree-new:focus-visible { background: rgba(38, 42, 39, .08); color: var(--ink); }
+  .tree-head:hover > .tree-new, .tree-head:focus-within > .tree-new, .tree-head.menu-open > .tree-new { display: flex; }
+  .tree > .tree-head > .tree-new svg { color: inherit; }
   .tree-head .chev { flex: none; margin-left: auto; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
   .tree.collapsed > .tree-head .chev { transform: rotate(-45deg); }
+  .tree-head:hover > .tree-new + .chev, .tree-head:focus-within > .tree-new + .chev, .tree-head.menu-open > .tree-new + .chev { margin-left: 6px; }
+  @media (hover: none) { .tree-head > .tree-new { display: flex; } .tree-head > .tree-new + .chev { margin-left: 6px; } }
   .tree > .rows { margin-left: 18px; padding-left: 4px; border-left: 1px solid var(--rule); }
   .tree > .rows > .row { padding-left: 8px; }
   .tree > .rows > .tree > .tree-head { padding-left: 8px; }
