@@ -21,6 +21,7 @@ import { AGENT_NAMES, agentFlavor, agentIconSvg } from './agentIcons.js';
 import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
+import { addBreak, isBreak, isCut, segmentFor } from './turns.js';
 import { resumeAvailability, resumeDirectoryGone, resumeFailure, resumeFallback } from './resume.js';
 import { forkAvailability, forkCopyRequest, forkSpawnParams } from './fork.js';
 import { messageTime } from './time.js';
@@ -1082,7 +1083,7 @@ async function revealSeq(s, thread, seq) {
     }
     if (!node || state.current !== s) return;
     const turn = node.closest('.turn');
-    const block = turn && [...thread.turns.values()].find((b) => b.el === turn);
+    const block = turn && turnBlocks(thread).find((b) => b.el === turn);
     if (block?.collapsed && block.body.contains(node)) {
         block.userToggled = true;
         setCollapsed(block, false);
@@ -1320,7 +1321,8 @@ async function openSession(s) {
         thread = {
             el: el('div', 'thread'),
             session: s,
-            turns: new Map(),   // turn id -> block (see createTurn)
+            turns: new Map(),   // turn id -> its blocks (see createTurn): one, or more when the person wrote mid-turn
+            breaks: [],         // seqs of what the person sent, sorted (see turns.js)
             newest: null,       // the latest turn: the only one that can still be running
             afterSeq: 0,        // newest seq received: forward sync starts here
             oldestSeq: LATEST,  // oldest seq loaded: scrolling up pages back from here
@@ -1417,6 +1419,7 @@ async function loadOlder(s, thread) {
         const shown = thread.el.isConnected;
         const before = box.scrollHeight; // older parts of an on-screen turn grow it too
         const fragment = document.createDocumentFragment();
+        noteBreaks(thread, decoded); // the whole page first: a turn's steps are placed around them
         for (const { m, view } of decoded) {
             thread.seen.add(m.id);
             trackBackground(thread, view, m.seq);
@@ -1447,7 +1450,9 @@ async function pollMessages(s = state.current) {
             for (const m of page.messages) thread.afterSeq = Math.max(thread.afterSeq, m.seq);
             const fresh = page.messages.filter((m) => !thread.seen.has(m.id));
             fresh.forEach((m) => thread.seen.add(m.id));
-            for (const { m, view } of await decodePage(s, fresh)) renderMessage(thread, view, m.seq);
+            const decoded = await decodePage(s, fresh);
+            noteBreaks(thread, decoded);
+            for (const { m, view } of decoded) renderMessage(thread, view, m.seq);
             more = page.hasMore;
         }
     } catch (e) {
@@ -1627,6 +1632,7 @@ function renderMessage(thread, view, seq) {
     trackBackground(thread, view, seq);
     trackContext(thread, view, seq);
     trackLinks(thread, view, seq, true);
+    noteBreaks(thread, [{ m: { seq }, view }]);
     const node = placeView(thread, view, seq);
     if (node) {
         thread.placeholder?.remove();
@@ -1657,6 +1663,21 @@ function renderMessage(thread, view, seq) {
 // ---------- Turns: a turn's steps fold under "已工作 7分2秒" ----------
 
 const TURN_KINDS = new Set(['agent', 'thinking', 'tool', 'tool-end', 'turn-start', 'turn-end', 'meta']);
+const SILENT_KINDS = new Set(['tool-end', 'turn-end']); // they close something an earlier step opened
+
+/** Every turn block of a thread. */
+const turnBlocks = (thread) => [...thread.turns.values()].flat();
+
+/**
+ * Note what the person sent among a page of decoded messages (`{ m, view }`),
+ * before its turn steps are placed. A block still running that they wrote
+ * after is over: the agent's next steps open a new one below their message.
+ */
+function noteBreaks(thread, decoded) {
+    let added = false;
+    for (const { m, view } of decoded) if (isBreak(view) && addBreak(thread.breaks, m.seq)) added = true;
+    if (added && thread.newest?.el.classList.contains('running')) refreshTurn(thread, thread.newest);
+}
 
 /**
  * Put one decoded message into a thread. Agent messages of a turn go into
@@ -1666,11 +1687,14 @@ const TURN_KINDS = new Set(['agent', 'thinking', 'tool', 'tool-end', 'turn-start
  */
 function placeView(thread, view, seq) {
     if (view?.turn && TURN_KINDS.has(view.kind)) {
-        let block = thread.turns.get(view.turn);
-        const created = !block;
-        if (created) block = createTurn(thread, view.turn, seq);
-        addToTurn(thread, block, view, seq);
-        return created ? block.el : null;
+        // One block per turn, unless the person wrote while it ran: then what
+        // came after their message is a block of its own, after it.
+        const segments = thread.turns.get(view.turn) ?? [];
+        const shows = !SILENT_KINDS.has(view.kind) && (view.kind === 'tool' || view.kind === 'turn-start' || renderable(view));
+        const i = segmentFor(segments, thread.breaks, seq, shows);
+        const block = i < 0 ? createTurn(thread, view.turn, seq) : segments[i];
+        addToTurn(thread, block, view, seq, shows);
+        return i < 0 ? block.el : null;
     }
     if (view?.command) {
         // The SDK records a run command again after its output; the person's
@@ -1702,11 +1726,14 @@ function insertBySeq(container, node, seq) {
 }
 
 function createTurn(thread, turn, seq) {
+    const segments = thread.turns.get(turn) ?? [];
+    const sibling = segments[0];
     const block = {
         turn, seq, maxSeq: seq,
         start: null, end: null, first: null, last: 0, lastAt: 0, // times (ms); lastAt: the server's, a fallback
         ended: false, collapsed: false, userToggled: false,
-        tools: new Map(), endedCalls: new Set(),
+        // Shared by the turn's blocks: a tool can end in the block after the one it started in.
+        tools: sibling?.tools ?? new Map(), endedCalls: sibling?.endedCalls ?? new Set(),
     };
     block.el = el('section', 'turn');
     block.el.dataset.seq = String(seq);
@@ -1718,14 +1745,18 @@ function createTurn(thread, turn, seq) {
     block.body = el('div', 'turn-body');
     block.final = el('div', 'turn-final');
     block.el.append(block.head, block.body, block.final);
-    thread.turns.set(turn, block);
+    segments.push(block);
+    thread.turns.set(turn, segments);
     return block;
 }
 
-function addToTurn(thread, block, view, seq) {
-    block.seq = Math.min(block.seq, seq);
-    block.maxSeq = Math.max(block.maxSeq, seq);
-    block.el.dataset.seq = String(block.seq);
+/** `shows`: the step adds something to look at, so the block spans it (see segmentFor). */
+function addToTurn(thread, block, view, seq, shows = true) {
+    if (shows) {
+        block.seq = Math.min(block.seq, seq);
+        block.maxSeq = Math.max(block.maxSeq, seq);
+        block.el.dataset.seq = String(block.seq);
+    }
     const previous = thread.newest;
     if (!thread.newest || block.maxSeq >= thread.newest.maxSeq) thread.newest = block;
     if (view.at) block.lastAt = Math.max(block.lastAt, view.at);
@@ -1778,7 +1809,7 @@ function addToTurn(thread, block, view, seq) {
 }
 
 function isRunning(thread, block) {
-    return !block.ended && block === thread.newest && isOnline(thread.session);
+    return !block.ended && block === thread.newest && isOnline(thread.session) && !isCut(block, thread.breaks);
 }
 
 function setCollapsed(block, collapsed) {
@@ -1950,9 +1981,9 @@ function fillBackground(node, thread, tasks) {
 
 /** The tool row of the call that started a background task, if loaded. */
 function launchRow(thread, call) {
-    for (const block of thread.turns.values()) {
-        const row = block.tools.get(call);
-        if (row) return { block, row };
+    for (const block of turnBlocks(thread)) {
+        const row = block.tools.get(call); // the turn's blocks share `tools`
+        if (row && block.el.contains(row)) return { block, row };
     }
     return null;
 }

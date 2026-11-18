@@ -72,6 +72,12 @@
   ACP（Cursor 等）的工具种类（`read`、`edit`、`delete`、`move`、`execute`……）。
   `CodexDiff` / `GeminiDiff` 是 CLI 每轮反复发送的累计 diff，**不是**一次修改。
 - `/clear` 只回一条「Context was reset」事件；服务器上的历史消息不会删。
+- 一个 turn 的 seq 区间里可以夹着用户消息：CLI 在 turn 结束（Claude 的 `result`）前不会把新消息交给 agent，turn id 不变，
+  后面的步骤照常带着原来的 turn。所以折叠块不能一个 turn 一个：`turns.js` 把用户发的消息（文字、自己发的图）的 seq 记成 break，
+  同一个 turn 的步骤只有和已有的块之间没有 break 才并进去，否则在消息后面新开一块（`thread.turns` 是 turn id → 块的数组）。
+  整页的 break 要在放这一页的步骤之前先记下（`noteBreaks`），往上翻历史时旧页里的消息才能把已经在屏幕上的块隔开。
+  `tool-call-end` / `turn-end` 不单独开块，并到前面最近的块；同一个 turn 的块共用 `tools` / `endedCalls`，工具可以在下一块里结束。
+  还在跑的块后面有了用户消息就不再算「正在工作」（`isCut`），底部改显示「正在思考」，下一步到了在消息下面开新块。
 
 ### RPC
 
