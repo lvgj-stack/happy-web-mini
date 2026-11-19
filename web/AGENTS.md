@@ -78,6 +78,14 @@
   整页的 break 要在放这一页的步骤之前先记下（`noteBreaks`），往上翻历史时旧页里的消息才能把已经在屏幕上的块隔开。
   `tool-call-end` / `turn-end` 不单独开块，并到前面最近的块；同一个 turn 的块共用 `tools` / `endedCalls`，工具可以在下一块里结束。
   还在跑的块后面有了用户消息就不再算「正在工作」（`isCut`），底部改显示「正在思考」，下一步到了在消息下面开新块。
+- 子 agent（`subagents.js`，对照 happy-cli `claude/utils/sessionProtocolMapper.ts`、happy-android `chat/ReducerTracer.kt`）：
+  子 agent 产生的每个信封都带 `subagent`（CLI 由启动它的 tool call id 算出的 cuid），开头一条 `start { title }`、结尾一条 `stop`，
+  第一条 text 是交给它的 prompt。启动它的 `Agent` 调用在 `args.sessionSubagent` 里带同一个 id（Codex 的 `CodexSubagent` 还可能在
+  `sessionSubagents` 里列几个）。`toView` 给所有 session 信封的 view 带上 `subagent`，`placeView` 一见到就交给 `placeSubagentStep`，
+  不进 turn 块，所以子 agent 的文字不会被当成这一轮的最终回答。启动行（`bindSubagent`）显示步数、点开 `#subagent` 面板。
+  旧的 `Task` 工具调用被 CLI 藏掉了，没有启动行：子 agent 做了事（有工具或文字）后补一行（`stand: true`），往上翻历史翻到真正的启动行时删掉补的那行。
+  后台跑的子 agent 启动调用立刻结束，CLI 也跟着发 `stop`，所以是否还在跑要看 `background.js`。
+  CLI 只在远程模式（SDK 带 `parent_tool_use_id`）转发子 agent 的步骤；子 agent 最后的回答作为 tool_result 交回，CLI 不转发。
 
 ### RPC
 

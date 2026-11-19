@@ -22,6 +22,7 @@ import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
 import { addBreak, isBreak, isCut, segmentFor } from './turns.js';
+import { launchedSubagents, stepsText, subagentStore } from './subagents.js';
 import { resumeAvailability, resumeDirectoryGone, resumeFailure, resumeFallback } from './resume.js';
 import { forkAvailability, forkCopyRequest, forkSpawnParams } from './fork.js';
 import { messageTime } from './time.js';
@@ -1487,16 +1488,19 @@ function toView(raw) {
     if (raw.role === 'session') {
         const env = content.type === 'session' ? content.data : content;
         const ev = env?.ev ?? {};
-        const at = { turn: env?.role === 'agent' ? env.turn ?? null : null, time: env?.time ?? 0 };
+        // `subagent`: a child agent's step (see subagents.js), shown under its launch, not in the turn.
+        const at = { turn: env?.role === 'agent' ? env.turn ?? null : null, time: env?.time ?? 0, subagent: env?.subagent ?? null };
         switch (ev.t) {
             case 'text':
                 if (env.role === 'user') return userView(ev.text);
                 return { kind: ev.thinking ? 'thinking' : 'agent', text: ev.text, ...at };
             case 'service': return { kind: 'meta', text: ev.text, ...at };
-            case 'tool-call-start': return { kind: 'tool', call: ev.call, name: ev.name, title: ev.title, args: ev.args, text: ev.title || ev.name, subagent: env.subagent ?? null, ...at };
+            case 'tool-call-start': return { kind: 'tool', call: ev.call, name: ev.name, title: ev.title, args: ev.args, text: ev.title || ev.name, ...at };
             case 'tool-call-end': return at.turn ? { kind: 'tool-end', call: ev.call, ...at } : null;
             case 'turn-start': return at.turn ? { kind: 'turn-start', ...at } : null;
             case 'turn-end': return at.turn ? { kind: 'turn-end', status: ev.status, ...at } : null;
+            case 'start': return at.subagent ? { kind: 'subagent-start', title: ev.title ?? null, ...at } : null;
+            case 'stop': return at.subagent ? { kind: 'subagent-stop', ...at } : null;
             case 'file':
                 if (ev.image || String(ev.mimeType ?? '').startsWith('image/')) {
                     return { kind: 'image', mine: env.role === 'user', ref: ev.ref, name: ev.name, mimeType: ev.mimeType, image: ev.image };
@@ -1686,6 +1690,7 @@ function noteBreaks(thread, decoded) {
  * or null when nothing new appears at the top level.
  */
 function placeView(thread, view, seq) {
+    if (view?.subagent) return placeSubagentStep(thread, view, seq);
     if (view?.turn && TURN_KINDS.has(view.kind)) {
         // One block per turn, unless the person wrote while it ran: then what
         // came after their message is a block of its own, after it.
@@ -1794,6 +1799,8 @@ function addToTurn(thread, block, view, seq, shows = true) {
             if (block.endedCalls.has(view.call)) row.classList.add('done');
             block.tools.set(view.call, row);
             insertBySeq(block.body, row, seq);
+            const children = launchedSubagents(view);
+            if (children.length) bindSubagent(thread, children, { row, block, view });
             break;
         }
         default: {
@@ -1888,6 +1895,183 @@ function toolRow(view, s) {
     row.append(line, detail);
     return row;
 }
+
+// ---------- Subagents: one line per child, opening to its own steps ----------
+
+/** The thread's children (see subagents.js) and the line each shows on: id -> { row, block, view }. */
+function subagentsOf(thread) {
+    thread.subagents ??= subagentStore();
+    thread.subagentRows ??= new Map();
+    return thread.subagents;
+}
+
+/**
+ * Keep a child's step out of the turn. A child no launch line names (the old
+ * `Task` tool, whose call the CLI hides) gets a line made up for it once it
+ * does something; returns the node to insert if that line opens a new block.
+ */
+function placeSubagentStep(thread, view, seq) {
+    const store = subagentsOf(thread);
+    const id = store.see(view, seq);
+    refreshSubagent(thread, id);
+    if (thread.subagentRows.has(id) || !view.turn || !store.worked(id)) return null;
+    const { title, first } = store.summary(id);
+    const stand = {
+        kind: 'tool', call: `subagent:${id}`, name: 'Task', title, subagent: null, stand: true,
+        args: { description: title ?? '子 agent', sessionSubagent: id }, turn: view.turn, time: first ?? view.time,
+    };
+    return placeView(thread, stand, seq);
+}
+
+/** Make a launch's tool line the child's: it counts the child's steps and opens them. */
+function bindSubagent(thread, ids, bound) {
+    subagentsOf(thread);
+    for (const id of ids) {
+        const old = thread.subagentRows.get(id);
+        if (old?.view.stand && !bound.view.stand) {
+            // Its real launch came in with an older page: the made-up line goes.
+            old.row.remove();
+            old.block.tools.delete(old.view.call);
+        } else if (old) continue;
+        thread.subagentRows.set(id, bound);
+    }
+    const { row } = bound;
+    row.classList.add('subagent');
+    row.querySelector('.tool-detail')?.remove(); // its prompt shows in the panel
+    const line = row.querySelector('.tool-line');
+    line.insertBefore(el('span', 'sub-count'), line.querySelector('.time'));
+    line.append(el('span', 'sub-chev'));
+    line.title = '查看子 agent 的进度';
+    line.onclick = () => openSubagent(thread, ids[0]);
+    refreshSubagent(thread, ids[0]);
+}
+
+/** A child's line and, when it is open, its panel follow what it has done. */
+function refreshSubagent(thread, id) {
+    const store = subagentsOf(thread);
+    const bound = thread.subagentRows.get(id);
+    if (bound) {
+        const summary = store.summary(id);
+        bound.row.querySelector('.sub-count').textContent = stepsText(summary.tools);
+        if (bound.view.stand && summary.stopped && !bound.row.classList.contains('done')) {
+            bound.block.endedCalls.add(bound.view.call);
+            bound.row.classList.add('done');
+        }
+    }
+    const panel = state.subagentPanel;
+    if (panel?.thread === thread && panel.id === id) renderSubagentPanel();
+}
+
+/** Whether a child is still at work, as far as can be told. */
+function subagentRunning(thread, id) {
+    if (!isOnline(thread.session)) return false;
+    const bound = thread.subagentRows.get(id);
+    // Run in the background: its launch ends at once, and the CLI reports it stopped with it.
+    if (bound && thread.background?.tasks().some((t) => t.id === bound.view.call)) return true;
+    if (subagentsOf(thread).summary(id).stopped || !bound) return false;
+    // The person writing mid-turn opens a new block of the same turn; the child still runs.
+    return !bound.row.classList.contains('done') && !bound.block.ended && thread.newest?.turn === bound.block.turn;
+}
+
+function openSubagent(thread, id) {
+    const dialog = $('subagent');
+    const body = $('subagent-body');
+    body.replaceChildren();
+    const steps = el('div', 'sub-steps');
+    state.subagentPanel = { thread, id, steps, nodes: new Map(), prompt: null };
+    const bound = thread.subagentRows.get(id);
+    const args = bound?.view.args ?? {};
+    const prompt = typeof args.prompt === 'string' && args.prompt.trim() ? args.prompt : null;
+    if (prompt) state.subagentPanel.prompt = prompt;
+    $('subagent-title').textContent = subagentsOf(thread).summary(id).title || args.description || bound?.view.title || '子 agent';
+    $('subagent-kind').textContent = [args.subagent_type, args.model].filter((v) => typeof v === 'string' && v).join(' · ');
+    body.append(steps);
+    if (!dialog.open) dialog.showModal(); // before filling it: the status only ticks while it is open
+    renderSubagentPanel();
+    body.scrollTop = body.scrollHeight;
+}
+
+/** Add what the open child did since the panel last looked, and its status. */
+function renderSubagentPanel() {
+    const panel = state.subagentPanel;
+    if (!panel) return;
+    const { thread, id, steps, nodes } = panel;
+    const store = subagentsOf(thread);
+    const body = $('subagent-body');
+    const stick = body.scrollTop + body.clientHeight >= body.scrollHeight - 80;
+    const list = store.steps(id);
+    for (const [i, { seq, view }] of list.entries()) {
+        if (nodes.has(seq)) continue;
+        let node;
+        if (i === 0 && view.kind === 'agent' && (panel.prompt == null || view.text.trim() === panel.prompt.trim())) {
+            // A Claude child's first text is the prompt it was given.
+            node = subagentPrompt(view.text);
+        } else if (view.kind === 'tool') {
+            node = toolRow(view, thread.session);
+            node.dataset.call = view.call;
+            node.dataset.time = String(view.time || Date.now());
+        } else if (renderable(view)) {
+            node = messageNode(view, thread.session);
+        } else continue;
+        node.dataset.seq = String(seq);
+        nodes.set(seq, node);
+        insertBySeq(steps, node, seq);
+    }
+    if (!nodes.size && panel.prompt && !steps.querySelector('.sub-prompt')) {
+        const node = subagentPrompt(panel.prompt);
+        node.dataset.seq = '-1';
+        steps.prepend(node);
+    }
+    for (const row of steps.querySelectorAll(':scope > .tool-row:not(.done)')) {
+        if (store.ended(id, row.dataset.call)) row.classList.add('done');
+    }
+    let empty = steps.querySelector(':scope > .sub-empty');
+    if (!list.length) {
+        empty ??= steps.appendChild(el('p', 'msg meta sub-empty'));
+        empty.textContent = '还没有收到它的步骤。在电脑终端里直接运行的会话，子 agent 的步骤可能不会同步过来。';
+    } else empty?.remove();
+    tickSubagentPanel();
+    if (stick) body.scrollTop = body.scrollHeight;
+}
+
+/** The task a child was given: folded to a few lines, open on a click. */
+function subagentPrompt(text) {
+    const node = el('div', 'sub-prompt');
+    const head = el('button', 'sub-prompt-head', '任务');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', 'false');
+    const md = el('div', 'md markdown-body');
+    md.innerHTML = renderMarkdown(text);
+    head.onclick = () => head.setAttribute('aria-expanded', String(node.classList.toggle('open')));
+    node.append(head, md);
+    return node;
+}
+
+/** "运行中 · 1分2秒 · 3 步" / "已结束 · 用时 40秒 · 3 步", and the clocks of its running tools. */
+function tickSubagentPanel() {
+    const panel = state.subagentPanel;
+    if (!panel || !$('subagent').open) return;
+    const { thread, id, steps } = panel;
+    const summary = subagentsOf(thread).summary(id);
+    const running = subagentRunning(thread, id);
+    const now = Date.now();
+    const start = summary.first;
+    const took = start == null ? '' : formatDuration((running ? now : summary.last ?? start) - start);
+    const parts = running ? ['运行中', took] : ['已结束', took && `用时 ${took}`];
+    parts.push(stepsText(summary.tools));
+    $('subagent-status').textContent = parts.filter(Boolean).join(' · ');
+    $('subagent').classList.toggle('running', running);
+    steps.classList.toggle('running', running);
+    if (!running) return;
+    for (const row of steps.querySelectorAll(':scope > .tool-row:not(.done)')) {
+        row.querySelector('.time').textContent = formatDuration(now - Number(row.dataset.time));
+    }
+}
+
+$('subagent-close').onclick = () => $('subagent').close();
+$('subagent').addEventListener('close', () => { state.subagentPanel = null; });
+// A click on the backdrop (outside the panel's box) closes it.
+$('subagent').addEventListener('click', (e) => { if (e.target === $('subagent')) $('subagent').close(); });
 
 const AWAIT_LIMIT = 3 * 60 * 1000;
 
@@ -3631,6 +3815,7 @@ setInterval(() => {
     const thread = state.current && state.threads.get(state.current.id);
     if (thread?.newest?.el.classList.contains('running')) tickTurn(thread.newest, true);
     if (state.thinkingNode?.parentElement === thread?.el) tickBackground();
+    tickSubagentPanel();
     if (thread?.awaiting && !awaiting(thread)) { thread.awaiting = null; renderThinking(); }
 }, 1000);
 
@@ -3638,6 +3823,8 @@ setButton($('new-open'), 'newChat', '');
 setButton($('logout'), 'logout', '退出登录');
 setButton($('settings-open'), 'settings', '');
 setButton($('settings-back'), 'back', '返回');
+$('subagent-close').innerHTML = iconSvg('close');
+$('subagent-icon').innerHTML = iconSvg('agent');
 setButton($('back'), 'back', '返回');
 setButton($('archive'), 'archive', '归档');
 setButton($('attach'), 'image', '');

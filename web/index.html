@@ -378,6 +378,46 @@
   .bg-drop-all { color: var(--muted); font-size: calc(13px * var(--chat-scale)); padding: 4px 0; }
   .bg-drop-all:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
   .tool-row.flash { animation: flash 1.6s ease-out; border-radius: 6px; }
+  /* A subagent's launch: counts its steps and opens them in a panel */
+  .tool-row.subagent .sub-count { flex: none; color: var(--muted); font-size: calc(12px * var(--chat-scale)); }
+  .tool-row.subagent .sub-count:empty { display: none; }
+  .tool-row.subagent .sub-chev { flex: none; width: 6px; height: 6px; margin: 0 4px 0 -2px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
+  .tool-row.subagent .tool-line:hover .sub-chev { border-color: var(--ink); }
+  /* The panel: a sheet from the right, the whole window when narrow */
+  #subagent { margin: 0 0 0 auto; width: min(600px, 100vw); height: 100%; max-height: none; max-width: none; border: 0; padding: 0; color: var(--ink); background: var(--sheet); box-shadow: -8px 0 40px rgba(38,42,39,.16); }
+  #subagent[open] { display: flex; flex-direction: column; animation: sheet-in .18s ease-out; }
+  #subagent::backdrop { background: rgba(38,42,39,.2); }
+  @keyframes sheet-in { from { transform: translateX(24px); opacity: .6; } }
+  .sub-head { display: flex; align-items: flex-start; gap: 12px; padding: 22px 20px 14px 24px; border-bottom: 1px solid var(--rule); }
+  body.desktop-mac .sub-head { padding-top: 36px; }
+  .sub-icon { flex: none; display: inline-flex; margin-top: 5px; color: var(--muted); }
+  #subagent.running .sub-icon { color: var(--moss); }
+  .sub-head .text { flex: 1; min-width: 0; }
+  #subagent-title { font: 400 19px/1.45 var(--serif); margin: 0; overflow-wrap: anywhere; }
+  .sub-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .sub-meta .spin { display: none; color: var(--moss); width: 10px; height: 10px; }
+  #subagent.running .sub-meta .spin { display: inline-block; margin-right: -6px; }
+  #subagent.running #subagent-status { color: var(--moss); }
+  #subagent-kind:empty { display: none; }
+  #subagent-close { flex: none; margin: 2px -4px 0 0; }
+  #subagent-body { flex: 1; overflow: auto; padding: 12px 24px 32px; font-size: 17px; }
+  .sub-steps .tool-line .spin { display: none; }
+  .sub-steps.running .tool-row:not(.done) .tool-line .spin { display: inline-block; }
+  .sub-steps.running .tool-row:not(.done) .tool-line svg { display: none; }
+  .sub-steps:not(.running) .tool-line .time, .sub-steps .tool-row.done .time { display: none; }
+  .sub-steps > .msg.agent { margin: 10px 0; }
+  .sub-prompt { margin: 4px 0 12px; padding: 8px 12px; background: var(--paper); border-radius: 8px; font-size: calc(14px * var(--chat-scale)); }
+  .sub-prompt-head { color: var(--muted); font-size: calc(13px * var(--chat-scale)); }
+  .sub-prompt-head::after { content: "展开"; margin-left: 6px; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+  .sub-prompt.open .sub-prompt-head::after { content: "收起"; }
+  .sub-prompt-head:hover { color: var(--ink); }
+  .sub-prompt .md { white-space: normal; margin-top: 2px; font-size: inherit; background: none; }
+  .sub-prompt:not(.open) .md { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  @media (max-width: 640px) {
+    #subagent { width: 100vw; box-shadow: none; }
+    .sub-head { padding: 16px 12px 12px 16px; }
+    #subagent-body { padding: 10px 16px 28px; }
+  }
   @keyframes flash { from { background: var(--moss-tint); } to { background: transparent; } }
   /* a message a link went back to: a ring, so a bubble keeps its own background */
   .msg.flash { animation: ring 1.6s ease-out; border-radius: 6px; }
@@ -703,6 +743,18 @@
       <button type="submit" id="new-submit" class="primary">开始</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="subagent" aria-labelledby="subagent-title">
+  <header class="sub-head">
+    <span id="subagent-icon" class="sub-icon"></span>
+    <div class="text">
+      <h2 id="subagent-title"></h2>
+      <div class="sub-meta"><span class="spin"></span><span id="subagent-status"></span><span id="subagent-kind"></span></div>
+    </div>
+    <button id="subagent-close" class="icon-only" type="button" aria-label="关闭" title="关闭（Esc）"></button>
+  </header>
+  <div id="subagent-body"></div>
 </dialog>
 
 <dialog id="archive-dialog" aria-labelledby="archive-title">
