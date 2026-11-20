@@ -1958,8 +1958,20 @@ function refreshSubagent(thread, id) {
             bound.row.classList.add('done');
         }
     }
+    if (bound) bound.row.classList.toggle('sub-running', subagentRunning(thread, id));
     const panel = state.subagentPanel;
     if (panel?.thread === thread && panel.id === id) renderSubagentPanel();
+}
+
+/** The child a launch call started, or null. */
+function subagentLaunchedBy(thread, call) {
+    for (const [id, bound] of thread.subagentRows ?? []) if (bound.view.call === call) return id;
+    return null;
+}
+
+/** Spin a child's line while it works, also after its call ended (run in the background). */
+function markSubagentRows(thread) {
+    for (const [id, bound] of thread?.subagentRows ?? []) bound.row.classList.toggle('sub-running', subagentRunning(thread, id));
 }
 
 /** Whether a child is still at work, as far as can be told. */
@@ -2000,11 +2012,20 @@ function renderSubagentPanel() {
     const body = $('subagent-body');
     const stick = body.scrollTop + body.clientHeight >= body.scrollHeight - 80;
     const list = store.steps(id);
+    if (panel.prompt && !steps.querySelector(':scope > .sub-prompt')) {
+        // The launch's prompt; a child run in the background is not sent it as its first text.
+        const node = subagentPrompt(panel.prompt);
+        node.dataset.seq = '-1';
+        steps.prepend(node);
+    }
     for (const [i, { seq, view }] of list.entries()) {
         if (nodes.has(seq)) continue;
         let node;
-        if (i === 0 && view.kind === 'agent' && (panel.prompt == null || view.text.trim() === panel.prompt.trim())) {
-            // A Claude child's first text is the prompt it was given.
+        if (i === 0 && view.kind === 'agent' && panel.prompt != null && view.text.trim() === panel.prompt.trim()) {
+            nodes.set(seq, null); // the prompt again, already on top
+            continue;
+        } else if (i === 0 && view.kind === 'agent' && panel.prompt == null) {
+            // No launch to read it from (the old Task tool): its first text is the prompt.
             node = subagentPrompt(view.text);
         } else if (view.kind === 'tool') {
             node = toolRow(view, thread.session);
@@ -2016,11 +2037,6 @@ function renderSubagentPanel() {
         node.dataset.seq = String(seq);
         nodes.set(seq, node);
         insertBySeq(steps, node, seq);
-    }
-    if (!nodes.size && panel.prompt && !steps.querySelector('.sub-prompt')) {
-        const node = subagentPrompt(panel.prompt);
-        node.dataset.seq = '-1';
-        steps.prepend(node);
     }
     for (const row of steps.querySelectorAll(':scope > .tool-row:not(.done)')) {
         if (store.ended(id, row.dataset.call)) row.classList.add('done');
@@ -2134,7 +2150,11 @@ function fillBackground(node, thread, tasks) {
         go.append(el('span', 'bg-label', task.label), el('span', 'bg-time'));
         if (task.since) go.querySelector('.bg-time').dataset.since = String(task.since);
         const row = launchRow(thread, task.id);
-        if (row) {
+        const child = subagentLaunchedBy(thread, task.id);
+        if (child) {
+            go.title = '查看子 agent 的进度';
+            go.onclick = () => openSubagent(thread, child);
+        } else if (row) {
             go.title = '跳到启动它的地方';
             go.onclick = () => revealRow(row);
         } else {
@@ -3816,6 +3836,7 @@ setInterval(() => {
     if (thread?.newest?.el.classList.contains('running')) tickTurn(thread.newest, true);
     if (state.thinkingNode?.parentElement === thread?.el) tickBackground();
     tickSubagentPanel();
+    markSubagentRows(thread);
     if (thread?.awaiting && !awaiting(thread)) { thread.awaiting = null; renderThinking(); }
 }, 1000);
 

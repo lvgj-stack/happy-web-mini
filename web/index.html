@@ -339,7 +339,9 @@
   .tool-line .spin { display: none; color: var(--moss); width: 11px; height: 11px; margin: 0 1.5px; }
   .turn.running .tool-row:not(.done) .tool-line .spin { display: inline-block; }
   .turn.running .tool-row:not(.done) .tool-line svg { display: none; }
-  .turn.collapsed .turn-body { display: none; }
+  /* Folded, a turn still shows the subagents it started (as the Android app does) */
+  .turn.collapsed .turn-body > :not(.tool-row.subagent) { display: none; }
+  .turn.collapsed .turn-body:not(:has(> .tool-row.subagent)) { display: none; }
   .turn-body { margin: 6px 0 0; padding-left: 2px; }
   .turn-body > .msg.agent { margin: 10px 0; }
   .turn-final > .msg.agent { margin: 12px 0 0; }
@@ -381,6 +383,9 @@
   /* A subagent's launch: counts its steps and opens them in a panel */
   .tool-row.subagent .sub-count { flex: none; color: var(--muted); font-size: calc(12px * var(--chat-scale)); }
   .tool-row.subagent .sub-count:empty { display: none; }
+  .tool-row.sub-running .tool-line .spin { display: inline-block; }
+  .tool-row.sub-running .tool-line svg { display: none; }
+  .tool-row.sub-running .tool-text { color: var(--moss); }
   .tool-row.subagent .sub-chev { flex: none; width: 6px; height: 6px; margin: 0 4px 0 -2px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
   .tool-row.subagent .tool-line:hover .sub-chev { border-color: var(--ink); }
   /* The panel: a sheet from the right, the whole window when narrow */

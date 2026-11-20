@@ -177,3 +177,57 @@ test('a task dismissed by hand stays gone, until it is started again', () => {
     t.see(send('toolu_s', { to: 'Dev', message: '…' }), 4);
     assert.deepEqual(t.labels(), ['Dev']);
 });
+
+// Claude Code now runs an Agent in the background unless told otherwise; the
+// call says neither way. Shapes from a real session (happy-cli 1.2.6).
+const SUB = 'c81e93a927f0bc59bd0a713f';
+const unsaid = (time = 1000) => ({ kind: 'tool', call: 'toolu_01Vt', name: 'Agent', title: 'Probe', subagent: null, time,
+    args: { description: 'Probe subagent steps', subagent_type: 'general-purpose', prompt: 'sleep', sessionSubagent: SUB } });
+const end = (call, time) => ({ kind: 'tool-end', call, subagent: null, time });
+const step = (time) => ({ kind: 'tool', call: `t${time}`, name: 'Bash', args: { command: 'sleep 8' }, subagent: SUB, time });
+
+test('an Agent that ends at once, before its child starts, runs in the background', () => {
+    const t = backgroundTracker();
+    t.see(unsaid(1000), 238);
+    t.see(end('toolu_01Vt', 1068), 239);
+    assert.deepEqual(t.labels(), []); // not known until its child shows up
+    t.see({ kind: 'subagent-start', title: 'Probe', subagent: SUB, time: 4410 }, 240);
+    t.see(step(4590), 242);
+    assert.deepEqual(t.labels(), ['Probe subagent steps']);
+    t.see(stops(note('toolu_01Vt')), 270);
+    assert.deepEqual(t.labels(), []);
+});
+
+test('the same, read from history newest page first', () => {
+    const t = backgroundTracker();
+    t.see(step(4590), 242);
+    t.see(end('toolu_01Vt', 1068), 239);
+    t.see(unsaid(1000), 238);
+    assert.deepEqual(t.labels(), ['Probe subagent steps']);
+});
+
+test('an Agent whose child works before its call ends ran in the foreground', () => {
+    const t = backgroundTracker();
+    t.see(unsaid(1000), 67);
+    t.see({ kind: 'subagent-start', title: 'Probe', subagent: SUB, time: 1030 }, 68);
+    t.see(step(2000), 70);
+    t.see({ kind: 'subagent-stop', subagent: SUB, time: 5000 }, 72);
+    t.see(end('toolu_01Vt', 5001), 73);
+    assert.deepEqual(t.labels(), []);
+});
+
+test('an Agent that fails at once, with no child, is not left running', () => {
+    const t = backgroundTracker();
+    t.see(unsaid(1000), 10);
+    t.see(end('toolu_01Vt', 1100), 11);
+    assert.deepEqual(t.labels(), []);
+});
+
+test('an Agent told to stay in the foreground never counts, however quick', () => {
+    const t = backgroundTracker();
+    const view = unsaid(1000);
+    t.see({ ...view, args: { ...view.args, run_in_background: false } }, 10);
+    t.see(end('toolu_01Vt', 1100), 11);
+    t.see(step(3000), 12);
+    assert.deepEqual(t.labels(), []);
+});

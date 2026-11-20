@@ -79,13 +79,16 @@
   `tool-call-end` / `turn-end` 不单独开块，并到前面最近的块；同一个 turn 的块共用 `tools` / `endedCalls`，工具可以在下一块里结束。
   还在跑的块后面有了用户消息就不再算「正在工作」（`isCut`），底部改显示「正在思考」，下一步到了在消息下面开新块。
 - 子 agent（`subagents.js`，对照 happy-cli `claude/utils/sessionProtocolMapper.ts`、happy-android `chat/ReducerTracer.kt`）：
-  子 agent 产生的每个信封都带 `subagent`（CLI 由启动它的 tool call id 算出的 cuid），开头一条 `start { title }`、结尾一条 `stop`，
-  第一条 text 是交给它的 prompt。启动它的 `Agent` 调用在 `args.sessionSubagent` 里带同一个 id（Codex 的 `CodexSubagent` 还可能在
+  子 agent 产生的每个信封都带 `subagent`（CLI 由启动它的 tool call id 算出的 cuid），开头一条 `start { title }`、结尾一条 `stop`；
+  前台跑的第一条 text 是交给它的 prompt，后台跑的没有这条，所以面板顶上的「任务」取启动参数的 `prompt`。启动它的 `Agent` 调用在 `args.sessionSubagent` 里带同一个 id（Codex 的 `CodexSubagent` 还可能在
   `sessionSubagents` 里列几个）。`toView` 给所有 session 信封的 view 带上 `subagent`，`placeView` 一见到就交给 `placeSubagentStep`，
-  不进 turn 块，所以子 agent 的文字不会被当成这一轮的最终回答。启动行（`bindSubagent`）显示步数、点开 `#subagent` 面板。
+  不进 turn 块，所以子 agent 的文字不会被当成这一轮的最终回答。启动行（`bindSubagent`）显示步数、点开 `#subagent` 面板；
+  一轮折叠后它启动的子 agent 行仍然露在外面（CSS 只藏 `.turn-body` 里别的东西，对照 Android 的回合卡片）。
   旧的 `Task` 工具调用被 CLI 藏掉了，没有启动行：子 agent 做了事（有工具或文字）后补一行（`stand: true`），往上翻历史翻到真正的启动行时删掉补的那行。
-  后台跑的子 agent 启动调用立刻结束，CLI 也跟着发 `stop`，所以是否还在跑要看 `background.js`。
-  CLI 只在远程模式（SDK 带 `parent_tool_use_id`）转发子 agent 的步骤；子 agent 最后的回答作为 tool_result 交回，CLI 不转发。
+  后台跑的子 agent 启动调用立刻结束，CLI 在一轮结束时还会给它发 `stop`，所以是否还在跑看 `background.js`（行上的 `sub-running`）。
+  CLI 只在远程模式（SDK 带 `parent_tool_use_id`）转发子 agent 的步骤。一轮结束时 CLI 清掉子 agent 的映射（`closeTurn` →
+  `clearSubagentTracking`），之后后台子 agent 的步骤都被缓存起来不再发出，面板里只能看到这一轮结束前的部分。
+  CLI 偶尔会把主 agent 的步骤错标成子 agent 的（按 parentUuid 继承），这种步骤只出现在面板里。
 
 ### RPC
 
@@ -118,7 +121,9 @@
 
 ### 只能推断的状态
 
-- 后台任务（`background.js`）：CLI 不转发后台任务的中间过程，还会丢掉 SDK 的任务结束消息，所以只能靠
+- 后台任务（`background.js`）：Agent 调用写了 `run_in_background: true` 的算后台；什么都没写的（Claude Code 现在默认放后台），
+  看顺序：调用 5 秒内就结束、它的子 agent 在结束之后才出现，就是后台跑的；子 agent 在调用结束前就干活的是前台，
+  没有子 agent 出现的（立刻报错，或者本地模式不转发）不算，免得一直显示在跑。CLI 不转发后台任务的中间过程，还会丢掉 SDK 的任务结束消息，所以只能靠
   `<task-notification>` 判断结束，判断不了的让用户手动清除（`happy.bgDismissed`）。
   子 agent 自己在后台启动的命令，通知只发给那个子 agent，不要算进来，否则会一直显示在跑。
 - 上下文剩余（`context.js`）：按最近一条回复的 `usage`（input + cache_creation + cache_read，subagent 的不算）和 CLI 盖上的 `context_window` 算。

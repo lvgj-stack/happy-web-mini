@@ -5,6 +5,10 @@
 // does reach us:
 //   - the launch: a tool call with `run_in_background: true` (an Agent may
 //     also carry a `name` to be messaged by) by the main agent, not a subagent;
+//     or an Agent call that says neither way: Claude Code now runs those in the
+//     background by default. Such a call ends at once ("launched"), and its
+//     child (the envelopes carrying `subagent`, see subagents.js) only starts
+//     after that; a child run in the foreground works before its call ends;
 //   - a resume: SendMessage({ to: <name or agentId>, summary?, message }) to an
 //     agent that had stopped;
 //   - each stop: a user message wrapped in <task-notification> with the
@@ -23,19 +27,32 @@
 import { stripTaskNotifications } from './localCommand.js';
 
 const SEND = 'SendMessage';
+const AGENTS = new Set(['Agent', 'Task']);
+const QUICK = 5000; // a launch "ends" within this (ms) when its agent runs in the background
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 /** `dismissed`: launch call -> seq of the (re)start dismissed by hand; kept by the caller across reloads. */
 export function backgroundTracker({ dismissed = new Map() } = {}) {
     const events = new Map(); // seq -> view that launches, resumes or stops something
+    const ends = new Map();   // main agent's tool call -> { seq, time } of its end
+    const children = new Map(); // subagent id -> seq of the first step seen
     let clearedAt = -Infinity; // the process ended after this seq
     let maxSeq = -Infinity;
+
+    /** An Agent call that did not say: in the background if it ended at once, before its child did anything. */
+    const inBackground = (view) => {
+        const end = ends.get(view.call);
+        const first = children.get(view.args.sessionSubagent);
+        return !!end && first != null && first > end.seq && !!view.time && !!end.time && end.time - view.time < QUICK;
+    };
 
     return {
         /** Feed every decoded message, in any order. */
         see(view, seq) {
             maxSeq = Math.max(maxSeq, seq);
             if (relevant(view)) events.set(seq, view);
+            if (view?.kind === 'tool-end' && !view.subagent) ends.set(view.call, { seq, time: view.time ?? 0 });
+            if (view?.subagent) children.set(view.subagent, Math.min(children.get(view.subagent) ?? Infinity, seq));
         },
         /** What still runs, oldest first: { id: the launch call, label, since: when it (re)started, ms or null }. */
         tasks() {
@@ -55,7 +72,7 @@ export function backgroundTracker({ dismissed = new Map() } = {}) {
     };
 
     function running() {
-        const state = replayState();
+        const state = replayState(inBackground);
         let past = false; // replayed beyond the moment the process ended
         for (const seq of [...events.keys()].sort((x, y) => x - y)) {
             if (!past && seq > clearedAt) { state.running.clear(); past = true; }
@@ -77,12 +94,16 @@ function relevant(view) {
  * its text, or lost once it has ended), so we would never see them stop.
  */
 const isTaskCall = (view) => view?.kind === 'tool' && !!view.call && !!view.args && !view.subagent
-    && (view.args.run_in_background === true || view.name === SEND);
+    && (view.args.run_in_background === true || view.name === SEND || isUnsaidAgent(view));
+
+/** An Agent launch that leaves where it runs to Claude Code's default (the background, now). */
+const isUnsaidAgent = (view) => AGENTS.has(view.name) && view.args.run_in_background == null && !!view.args.sessionSubagent;
 
 /** When a message was sent: the server's time, else the CLI's. */
 const when = (view) => view.at || view.time || null;
 
-function replayState() {
+/** `inBackground(view)`: whether an Agent launch that did not say runs in the background. */
+function replayState(inBackground) {
     const agents = new Map();  // launch call -> { name, label }
     const aliases = new Map(); // call / name / task id -> launch call
     const running = new Map(); // launch call -> { label shown, since, seq of the (re)start }
@@ -122,7 +143,7 @@ function replayState() {
         running,
         see(view, seq) {
             if (isTaskCall(view)) {
-                if (view.args.run_in_background === true) launch(view, seq);
+                if (view.args.run_in_background === true || (isUnsaidAgent(view) && inBackground(view))) launch(view, seq);
                 else if (view.name === SEND) resume(view, seq);
             }
             for (const s of view?.stops ?? []) stop(s);
