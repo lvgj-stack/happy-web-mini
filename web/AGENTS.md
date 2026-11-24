@@ -59,8 +59,13 @@
 - 发消息：`POST /v3/sessions/:id/messages`，加密后放进 `messages`；模型、强度、权限模式放在 `meta.model` / `meta.effort` /
   `meta.permissionMode`（Happy Agent 会话再带 `modelProviderId`）。Codex 选「跟随 Codex 配置」时发 `model: null`
   （没选强度时再加 `effort: null`），CLI 就不用它内置的默认值，改按那台电脑的 `~/.codex/config.toml`。
-- 实时推送走 Socket.IO：`new-message`、`update-session`、`new-session`，以及临时事件 `activity`（含 `thinking`）和
+- 实时推送走 Socket.IO：`new-message`、`update-session`、`new-session`、`delete-session`，以及临时事件 `activity`（含 `thinking`）和
   `machine-activity`。断线时退回每 3 秒轮询正在看的会话，重连后补拉。
+- 删除已归档会话（`deleteSession.js`）：调用 `DELETE /v1/sessions/:id`（404 视为已删，对照 iOS `SessionActions.deliver`）；
+  只对已归档的普通会话开放，Bot / 任务不提供删除（对照 iOS `SessionInfoModel.keepsConversation`、Android `SessionOps.delete`）。
+  本标签页发起删除时把会话 id 放进 `state.deletingIds`，忽略服务端回推的 `delete-session` 避免和本地收尾冲突；
+  删除后清理内存状态和该会话在 `localStorage` 里的键（`happy.links.*` / `happy.lines.*` / `happy.model.*` / `happy.effort.*` / `happy.permission.*` / `seen` / `bgDismissed`）。
+  残留 worktree 的检查按 `(machineId, repo)` 分组调用一次 `listWorktrees`，避免批量删除时重复发 RPC，且只删没有被其余未删会话继续引用的 worktree。
 
 ### 消息格式
 

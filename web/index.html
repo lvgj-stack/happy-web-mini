@@ -54,6 +54,8 @@
   .quiet:hover:not(:disabled) { color: var(--ink); }
   .primary { background: var(--moss); color: #fff; padding: 8px 18px; border-radius: 6px; }
   .primary:hover:not(:disabled) { background: #4A6450; }
+  .primary.danger { background: var(--error); }
+  .primary.danger:hover:not(:disabled) { background: #8E3C31; }
 
   /* ---------- Login ---------- */
   #login { max-width: 360px; margin: 14vh auto 0; padding: 0 24px; }
@@ -227,6 +229,13 @@
   .machine.archived .row.selected .name { color: var(--ink); }
   .machine.archived .more { display: block; width: 100%; text-align: left; padding: 6px 12px 6px 33px; color: var(--moss); font-size: 13px; border-radius: 6px; }
   .machine.archived .more:hover { background: rgba(38, 42, 39, .04); }
+  /* Batch delete action on the 已归档 head: shown on hover (always on touch), next to the chevron. */
+  .group-action { display: none; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; margin: -3px 0 -3px auto; border-radius: 5px; color: var(--muted); }
+  .group-action:hover, .group-action:focus-visible { background: rgba(164, 71, 59, .1); color: var(--error); }
+  .group-head:hover > .group-action, .group-head:focus-within > .group-action, .group-head.menu-open > .group-action { display: flex; }
+  .machine.archived .group-head > .group-action svg { width: 14px; height: 14px; color: inherit; }
+  .group-head:hover > .group-action + .chev, .group-head:focus-within > .group-action + .chev, .group-head.menu-open > .group-action + .chev { margin-left: 6px; }
+  @media (hover: none) { .group-head > .group-action { display: flex; } .group-head > .group-action + .chev { margin-left: 6px; } }
 
   /* Right-click menu on the list (contextmenu.js); the row it is for stays lit */
   .row.menu-open, .tree-head.menu-open, .machine.archived .group-head.menu-open { background: rgba(38, 42, 39, .06); }
@@ -267,7 +276,8 @@
   #chat-sub > span { white-space: nowrap; flex: none; }
   #chat-sub > span:nth-child(2) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #back { display: none; margin-top: 6px; }
-  #archive { margin-top: 6px; flex: none; }
+  #archive, #delete-session { margin-top: 6px; flex: none; }
+  #delete-session:hover:not(:disabled) { color: var(--error); }
   #notice { font-size: 14px; padding-bottom: 8px; }
   /* Links the chat mentions: docked in the right margin when the main area is wide enough */
   main { container-type: inline-size; }
@@ -552,22 +562,41 @@
   .slash-item .desc { flex: 1; min-width: 0; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .slash-item .kind { flex: none; color: var(--moss); font-size: 12px; }
 
-  /* New session */
+  /* New session, archive, delete dialogs */
   #new-open { color: var(--moss); }
-  #new-session, #archive-dialog { border: 0; border-radius: 12px; padding: 24px 24px 20px; width: min(440px, calc(100vw - 32px)); color: var(--ink); background: var(--sheet); box-shadow: 0 12px 48px rgba(38,42,39,.18); }
-  #new-session::backdrop, #archive-dialog::backdrop { background: rgba(38,42,39,.25); }
-  #new-session h2, #archive-dialog h2 { font: 400 20px/1.4 var(--serif); margin: 0 0 16px; }
+  #new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog { border: 0; border-radius: 12px; padding: 24px 24px 20px; width: min(440px, calc(100vw - 32px)); color: var(--ink); background: var(--sheet); box-shadow: 0 12px 48px rgba(38,42,39,.18); }
+  #new-session::backdrop, #archive-dialog::backdrop, #delete-dialog::backdrop, #batch-delete-dialog::backdrop { background: rgba(38,42,39,.25); }
+  #new-session h2, #archive-dialog h2, #delete-dialog h2, #batch-delete-dialog h2 { font: 400 20px/1.4 var(--serif); margin: 0 0 16px; }
   #new-session label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
   #new-session select.field { appearance: auto; }
+<<<<<<< HEAD
   #new-worktree-name { margin-top: 8px; }
   #new-session .actions, #archive-dialog .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 20px; }
+=======
+  #new-session .actions, #archive-dialog .actions, #delete-dialog .actions, #batch-delete-dialog .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 20px; }
+>>>>>>> 62f29f1 (feat(web): 支持单条和批量删除已归档会话)
   #new-session .error { margin: 12px 0 0; }
-  #archive-dialog { width: min(400px, calc(100vw - 32px)); }
-  #archive-text { margin: 0 0 12px; }
-  #archive-text:empty { display: none; }
-  #archive-dialog .check { align-items: flex-start; margin: 0; }
-  #archive-dialog .check input { margin-top: 3px; flex: none; }
-  #archive-worktree-note { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  #archive-dialog, #delete-dialog { width: min(400px, calc(100vw - 32px)); }
+  #archive-text, #delete-text { margin: 0 0 12px; }
+  #archive-text:empty, #delete-text:empty { display: none; }
+  #archive-dialog .check, #delete-dialog .check, #batch-delete-dialog .check { align-items: flex-start; margin: 0; }
+  #archive-dialog .check input, #delete-dialog .check input, #batch-delete-dialog .check input { margin-top: 3px; flex: none; }
+  #archive-worktree-note, #delete-worktree-note, #batch-worktree-note { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  #batch-delete-dialog { width: min(480px, calc(100vw - 32px)); }
+  .batch-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .batch-picks button { font-size: 12px; color: var(--muted); background: var(--paper); border-radius: 12px; padding: 3px 10px; }
+  .batch-picks button:hover:not(:disabled) { color: var(--ink); background: var(--rule); }
+  .batch-list { max-height: min(320px, 42vh); overflow-y: auto; border: 1px solid var(--rule); border-radius: 8px; padding: 4px; margin-bottom: 12px; background: #fff; }
+  .batch-item { display: flex; align-items: flex-start; gap: 9px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  .batch-item:hover { background: rgba(38, 42, 39, .04); }
+  .batch-item input { width: 15px; height: 15px; accent-color: var(--error); margin: 3px 0 0; flex: none; }
+  .batch-item .info { min-width: 0; flex: 1; }
+  .batch-item .name { display: block; font-size: 14px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .batch-item .sub { display: block; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #batch-note { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  #batch-skipped { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+  #batch-skipped:empty { display: none; }
+  #batch-delete-dialog .actions .batch-count { margin-right: auto; font-size: 13px; color: var(--muted); }
   .recent { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .recent button { font-size: 12px; color: var(--muted); background: var(--paper); border-radius: 12px; padding: 2px 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recent button:hover { color: var(--ink); }
@@ -673,6 +702,9 @@
     background: linear-gradient(#62806A, var(--moss)); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .22), 0 .5px 1.5px rgba(0, 0, 0, .18), inset 0 .5px 0 rgba(255, 255, 255, .18); }
   body.desktop-mac .primary:hover:not(:disabled) { background: linear-gradient(#5A7862, #4A6450); }
   body.desktop-mac .primary:active:not(:disabled) { background: #445C49; }
+  body.desktop-mac .primary.danger { background: linear-gradient(#B45549, var(--error)); }
+  body.desktop-mac .primary.danger:hover:not(:disabled) { background: linear-gradient(#A64B3F, #8E3C31); }
+  body.desktop-mac .primary.danger:active:not(:disabled) { background: #81342A; }
   body.desktop-mac :is(dialog .actions .quiet, #notify-test, #wallpaper-change, #wallpaper-remove) {
     padding: 4px 16px; min-height: 28px; font-size: 13px; line-height: 20px; border: 0; border-radius: 6px; color: var(--ink); background: #fff; box-shadow: var(--control); }
   body.desktop-mac :is(dialog .actions .quiet, #notify-test, #wallpaper-change, #wallpaper-remove):hover:not(:disabled) { color: var(--ink); background: #F7F7F5; border-color: transparent; }
@@ -722,14 +754,17 @@
   body.desktop-mac #links.open:not([hidden]) { border-radius: 10px; }
 
   /* Sheets and the subagent panel: frosted, a hairline edge, a lighter dimming behind */
-  body.desktop-mac :is(#new-session, #archive-dialog) { border-radius: 12px; padding: 20px 20px 16px; background: rgba(250, 250, 248, .9);
+  body.desktop-mac :is(#new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog) { border-radius: 12px; padding: 20px 20px 16px; background: rgba(250, 250, 248, .9);
     -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6);
     box-shadow: 0 0 0 .5px rgba(0, 0, 0, .18), 0 22px 60px rgba(0, 0, 0, .22), 0 4px 12px rgba(0, 0, 0, .06); }
-  body.desktop-mac :is(#new-session, #archive-dialog, #subagent)::backdrop { background: rgba(0, 0, 0, .12); }
-  body.desktop-mac :is(#new-session, #archive-dialog) h2 { font-size: 18px; margin-bottom: 10px; }
+  body.desktop-mac :is(#new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog, #subagent)::backdrop { background: rgba(0, 0, 0, .12); }
+  body.desktop-mac :is(#new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog) h2 { font-size: 18px; margin-bottom: 10px; }
   body.desktop-mac #new-session label { font-size: 12px; margin: 10px 0 4px; }
-  body.desktop-mac :is(#new-session, #archive-dialog) .actions { gap: 10px; margin-top: 18px; }
-  body.desktop-mac :is(#new-session, #archive-dialog) .actions .primary { min-width: 72px; justify-content: center; }
+  body.desktop-mac :is(#new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog) .actions { gap: 10px; margin-top: 18px; }
+  body.desktop-mac :is(#new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog) .actions .primary { min-width: 72px; justify-content: center; }
+  body.desktop-mac .batch-picks button { background: rgba(38, 42, 39, .06); }
+  body.desktop-mac .batch-picks button:hover:not(:disabled) { background: rgba(38, 42, 39, .1); }
+  body.desktop-mac .batch-list { border: 0; box-shadow: var(--control); }
   body.desktop-mac .recent button { background: rgba(38, 42, 39, .06); }
   body.desktop-mac .recent button:hover { background: rgba(38, 42, 39, .1); }
   body.desktop-mac #subagent { box-shadow: -.5px 0 0 rgba(0, 0, 0, .14), -12px 0 40px rgba(0, 0, 0, .12); }
@@ -795,6 +830,7 @@
       </div>
       <button id="links-toggle" class="quiet" type="button" aria-label="链接" title="链接" hidden></button>
       <button id="archive" class="quiet" hidden>归档</button>
+      <button id="delete-session" class="quiet" hidden>删除</button>
     </div>
     <aside id="links" aria-label="链接" hidden></aside>
     <div class="column error" id="notice" role="status"></div>
@@ -918,6 +954,42 @@
     <div class="actions">
       <button type="button" id="archive-cancel" class="quiet">取消</button>
       <button type="submit" value="archive" class="primary" autofocus>归档</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="delete-dialog" aria-labelledby="delete-title">
+  <form id="delete-form" method="dialog">
+    <h2 id="delete-title">删除会话</h2>
+    <p id="delete-text"></p>
+    <label class="check" id="delete-worktree-row" hidden>
+      <input type="checkbox" id="delete-worktree">
+      <span><span id="delete-worktree-label"></span>
+        <span id="delete-worktree-note"></span></span>
+    </label>
+    <div class="actions">
+      <button type="button" id="delete-cancel" class="quiet">取消</button>
+      <button type="submit" value="delete" id="delete-submit" class="primary danger">永久删除</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="batch-delete-dialog" aria-labelledby="batch-delete-title">
+  <form id="batch-delete-form" method="dialog">
+    <h2 id="batch-delete-title">批量删除已归档会话</h2>
+    <p id="batch-note">删除后，服务器上的对话记录和附件会永久清空，无法恢复。本机目录和本地聊天记录不受影响。</p>
+    <div class="batch-picks" id="batch-picks"></div>
+    <div class="batch-list" id="batch-list" role="group" aria-label="已归档会话"></div>
+    <label class="check" id="batch-worktree-row" hidden>
+      <input type="checkbox" id="batch-worktree">
+      <span><span id="batch-worktree-label"></span>
+        <span id="batch-worktree-note"></span></span>
+    </label>
+    <p id="batch-skipped"></p>
+    <div class="actions">
+      <span class="batch-count" id="batch-count"></span>
+      <button type="button" id="batch-cancel" class="quiet">取消</button>
+      <button type="submit" id="batch-submit" class="primary danger" disabled>永久删除</button>
     </div>
   </form>
 </dialog>

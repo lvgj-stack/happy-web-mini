@@ -39,6 +39,7 @@ import ArrowDown from './node_modules/lucide-static/dist/esm/icons/arrow-down.mj
 import GitFork from './node_modules/lucide-static/dist/esm/icons/git-fork.mjs';
 import ChevronUp from './node_modules/lucide-static/dist/esm/icons/chevron-up.mjs';
 import ChevronDown from './node_modules/lucide-static/dist/esm/icons/chevron-down.mjs';
+import Trash from './node_modules/lucide-static/dist/esm/icons/trash.mjs';
 
 const ICONS = {
     terminal: SquareTerminal,
@@ -78,6 +79,7 @@ const ICONS = {
     fork: GitFork,
     findPrev: ChevronUp,
     findNext: ChevronDown,
+    trash: Trash,
 };
 
 /** Filled icons: the glyph is a solid shape, not an outline. */

@@ -38,6 +38,10 @@ import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
+import {
+    archivedBefore, canDeleteSession, clearSessionStorage, deleteSessionsOnServer,
+    deleteSummary, orphanedWorktrees, probeWorktrees, removeOrphanedWorktrees,
+} from './deleteSession.js';
 
 fitToViewport();
 
@@ -82,6 +86,8 @@ const state = {
     linesGen: 0,             // bumped on logout: a run still going stops
     linesFirst: null,        // the session just opened: the others step aside for it
     linesRender: null,
+    deletingIds: new Set(),  // session ids being deleted by this tab, so our own delete-session push is ignored
+    deletingBatch: false,
 };
 
 // ---------- HTTP ----------
@@ -92,7 +98,11 @@ async function api(method, path, body, auth = true) {
     if (auth) headers.Authorization = `Bearer ${state.token}`;
     const res = await fetch(state.server + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
     if (res.status === 401 && auth) { logout(); throw new Error('登录已失效，请重新登录'); }
-    if (!res.ok) throw new Error(`服务器返回 ${res.status}`);
+    if (!res.ok) {
+        const err = new Error(`服务器返回 ${res.status}`);
+        err.status = res.status;
+        throw err;
+    }
     return res.json();
 }
 /** The bearer token, only for URLs on the Happy server itself (never a presigned third party). */
@@ -186,7 +196,7 @@ function logout() {
     state.linesGen++;
     socket?.disconnect();
     socket = null;
-    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map() });
+    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), deletingIds: new Set(), deletingBatch: false });
     $('app').hidden = true;
     $('login').hidden = false;
     desktop.reset();
@@ -543,7 +553,7 @@ function renderList() {
     // Rebuild only when what the list shows changed; heartbeats alone do not.
     const signature = JSON.stringify([[...state.collapsed], groups.map((m) =>
         [m.key, m.name, m.sessions.map((s) => [s.id, sessionTitle(s), kindOf(s), JSON.stringify(checkout(s)), s.meta.task?.folderName, waitingSets(s).length, isUnread(s), inBackground(s), linesKey(s)])]),
-        archived.length, state.archivedOpen, archived.length > archivedRows.length,
+        archived.length, archived.some(canDeleteSession), state.archivedOpen, archived.length > archivedRows.length,
         archivedRows.map((s) => [s.id, sessionTitle(s), s.meta.path, s.meta.host, archivedAt(s), linesKey(s)])]);
     if (signature === state.listSignature) return;
     if (state.dragHost) return; // rebuilt when the drag ends; removing the dragged head would cancel it
@@ -691,12 +701,25 @@ function treeNode(key, kind, icon, name, title, sessions, children) {
 function archivedSection(archived, shown) {
     const collapsed = !state.archivedOpen;
     const section = el('section', 'machine archived' + (collapsed ? ' collapsed' : ''));
-    section.append(groupHead('已归档', archived.length, collapsed, () => {
+    const head = groupHead('已归档', archived.length, collapsed, () => {
         state.archivedOpen = !state.archivedOpen;
         state.archivedShown = ARCHIVED_PAGE;
         if (state.archivedOpen) localStorage.setItem('happy.archivedOpen', '1'); else localStorage.removeItem('happy.archivedOpen');
         renderList();
-    }, 'archive'));
+    }, 'archive');
+    if (archived.some(canDeleteSession)) {
+        // A span, not a button: it sits inside the head's button, which opens or folds the group.
+        const del = el('span', 'group-action');
+        del.setAttribute('role', 'button');
+        del.tabIndex = 0;
+        del.title = del.ariaLabel = '批量删除已归档会话';
+        del.innerHTML = iconSvg('trash', 14);
+        const open = (e) => { e.stopPropagation(); e.preventDefault(); openBatchDelete(); };
+        del.onclick = open;
+        del.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); };
+        head.insertBefore(del, head.querySelector('.chev'));
+    }
+    section.append(head);
     const rows = el('div', 'rows');
     for (const s of shown) {
         const { project, worktree } = place(s);
@@ -726,6 +749,8 @@ function renderHead() {
     const s = state.current;
     $('archive').hidden = !s || isArchived(s);
     renderArchiveButton();
+    $('delete-session').hidden = !s || !canDeleteSession(s);
+    renderDeleteButton();
     // Archived, or its CLI is gone: nothing would pick a message up, so offer to bring it back instead.
     $('composer').hidden = !s || isDisconnected(s);
     $('readonly').hidden = !s || !isDisconnected(s);
@@ -3152,6 +3177,14 @@ async function onUpdate(body) {
         await ingest(body);
         renderList();
         if (document.body.classList.contains('in-settings')) renderSettings();
+        return;
+    }
+    if (body.t === 'delete-session' && body.sid) {
+        // Ignore echoes of deletions triggered by this tab; our own flow forgets and notifies.
+        if (state.deletingIds.has(body.sid) || !state.sessions.has(body.sid)) return;
+        const wasCurrent = state.current?.id === body.sid;
+        forgetSessions([body.sid]);
+        if (wasCurrent) notice('这个会话已在其他设备删除');
     }
 }
 
@@ -3360,6 +3393,389 @@ async function dropArchivedWorktree(s, path) {
     }
 }
 
+// ---------- Delete archived sessions (single & batch) ----------
+
+/** The header's 删除 button (shown for deletable archived sessions). */
+function renderDeleteButton() {
+    const busy = !!state.current?.deleting || state.deletingBatch;
+    $('delete-session').disabled = busy;
+    setButton($('delete-session'), 'trash', busy ? '正在删除' : '删除', busy);
+}
+
+/** Reset the reading area when the open session is gone and there is nothing to switch to. */
+function clearCurrentSession() {
+    state.current = null;
+    clearInterval(state.messageTimer);
+    state.messageTimer = null;
+    closeLinksPopover();
+    $('messages').replaceChildren(el('p', 'placeholder', '从左边选一个会话。'));
+    document.body.classList.remove('in-chat');
+    renderHead();
+    renderModelPicker();
+    renderContext();
+    renderUsage();
+    renderAsk();
+    renderThinking();
+    renderTray();
+}
+
+/** Remove deleted sessions from memory and browser storage, switching away if the open one went. */
+function forgetSessions(ids, { preferArchived = false } = {}) {
+    const existing = ids.filter((id) => state.sessions.has(id));
+    if (!existing.length) return;
+    const removed = new Set(existing);
+    const wasCurrent = !!(state.current && removed.has(state.current.id));
+    let archivedNeighbours = [];
+    if (wasCurrent && preferArchived) {
+        const archived = archivedSessions();
+        const at = archived.indexOf(state.current);
+        archivedNeighbours = at < 0 ? archived : [...archived.slice(at + 1), ...archived.slice(0, at).reverse()];
+    }
+
+    let bgChanged = false;
+    for (const id of existing) {
+        state.sessions.delete(id);
+        state.threads.delete(id);
+        state.lines.delete(id);
+        state.drafts.delete(id);
+        state.pendingImages.delete(id);
+        delete state.seen[id];
+        if (id in state.bgDismissed) { delete state.bgDismissed[id]; bgChanged = true; }
+        const prefix = `${id}:`;
+        for (const k of [...state.askDrafts.keys()]) if (k.startsWith(prefix)) state.askDrafts.delete(k);
+        for (const k of [...state.askSent]) if (k.startsWith(prefix)) state.askSent.delete(k);
+    }
+    state.linesQueue = state.linesQueue.filter((x) => !removed.has(x.id));
+    if (state.linesFirst && removed.has(state.linesFirst.id)) state.linesFirst = null;
+    if (state.browse && removed.has(state.browse.sessionId)) state.browse = null;
+    clearSessionStorage(localStorage, existing);
+    saveSeen();
+    if (bgChanged) {
+        try { localStorage.setItem('happy.bgDismissed', JSON.stringify(state.bgDismissed)); } catch { /* ignore */ }
+    }
+
+    if (wasCurrent) {
+        if ($('subagent').open) $('subagent').close();
+        // Clear current before openSession so it does not write the deleted session's draft back.
+        state.current = null;
+        clearInterval(state.messageTimer);
+        state.messageTimer = null;
+        const next = preferArchived
+            ? archivedNeighbours.find((n) => state.sessions.has(n.id)) ?? liveSessions()[0] ?? null
+            : liveSessions()[0] ?? archivedSessions()[0] ?? null;
+        if (next && !document.body.classList.contains('in-settings')) openSession(next);
+        else clearCurrentSession();
+    }
+    renderList();
+    renderHead();
+    renderAsk();
+    renderUsage();
+    if (document.body.classList.contains('in-settings')) renderSettings();
+}
+
+/** Delete confirmed worktrees on their computers, prompting once per dirty checkout. */
+function cleanUpWorktrees(worktrees) {
+    return removeOrphanedWorktrees(
+        worktrees,
+        (wt, opts) => removeWorktree(wt.path, (command, cwd) => machineBash(wt.machine, command, cwd), opts),
+        (wt) => confirm(`「${wt.name}」里有未提交的修改或未跟踪的文件，删掉后这些改动就没了。仍要删除？`),
+    );
+}
+
+/**
+ * Confirmation dialog for deleting one archived session, with an async check
+ * for whether its orphaned worktree still exists on that computer.
+ */
+let deleteDialogGen = 0;
+function askDelete(s, candidate) {
+    const dialog = $('delete-dialog');
+    const rowEl = $('delete-worktree-row');
+    const box = $('delete-worktree');
+    const label = $('delete-worktree-label');
+    const note = $('delete-worktree-note');
+    const what = s === state.current ? '' : `「${sessionTitle(s)}」`;
+    const gen = ++deleteDialogGen;
+    let confirmedWorktree = null;
+
+    $('delete-title').textContent = `删除${what || '会话'}`;
+    $('delete-text').textContent = '删除后，服务器上的对话记录和附件会永久清空，无法恢复。本机目录和本地聊天记录不受影响。';
+    box.checked = false;
+    box.disabled = true;
+    rowEl.hidden = !candidate;
+    if (candidate) {
+        label.textContent = `同时删除 worktree「${candidate.name}」`;
+        note.textContent = '正在检查这台电脑上的 worktree…';
+        refreshMachines().then((machines) => probeWorktrees(
+            [candidate],
+            machines,
+            (m, repo) => listWorktrees(repo, (command, cwd) => machineBash(m, command, cwd)),
+        )).then((res) => {
+            if (!dialog.open || gen !== deleteDialogGen) return;
+            if (res.existing.length === 1) {
+                confirmedWorktree = res.existing[0];
+                box.disabled = false;
+                box.checked = true;
+                note.textContent = '分支已合并的话一并删除，没合并的保留。';
+            } else if (res.offline.length === 1) {
+                note.textContent = '这台电脑现在离线，无法检查或删除 worktree。';
+            } else if (res.missing.length === 1) {
+                rowEl.hidden = true;
+            } else {
+                note.textContent = '仓库已不在或无法检查 worktree。';
+            }
+        }, () => {
+            if (!dialog.open || gen !== deleteDialogGen) return;
+            note.textContent = '暂时无法检查这台电脑上的 worktree。';
+        });
+    }
+    dialog.returnValue = '';
+    dialog.showModal();
+    return new Promise((resolve) => {
+        dialog.addEventListener('close', () => {
+            resolve(dialog.returnValue === 'delete' ? { worktree: !rowEl.hidden && box.checked && !box.disabled ? confirmedWorktree : null } : null);
+        }, { once: true });
+    });
+}
+
+const deleteCurrent = () => deleteSessionFlow(state.current);
+
+/** Permanently delete one archived session (and optionally its leftover worktree). */
+async function deleteSessionFlow(s) {
+    if (!canDeleteSession(s) || s.deleting || state.deletingIds.has(s.id) || state.deletingBatch) return;
+    const candidate = orphanedWorktrees([s], state.sessions.values())[0] ?? null;
+    const answer = await askDelete(s, candidate);
+    if (!answer) return;
+    if (!canDeleteSession(s) || !state.sessions.has(s.id) || s.deleting || state.deletingIds.has(s.id)) return;
+
+    s.deleting = true;
+    state.deletingIds.add(s.id);
+    renderDeleteButton();
+    let res;
+    try {
+        res = await deleteSessionsOnServer([s], (x) => api('DELETE', `/v1/sessions/${encodeURIComponent(x.id)}`));
+    } finally {
+        s.deleting = false;
+        state.deletingIds.delete(s.id);
+    }
+
+    if (res.deleted.length) {
+        const worktree = answer.worktree && orphanedWorktrees([s], state.sessions.values()).length ? answer.worktree : null;
+        forgetSessions([s.id], { preferArchived: true });
+        let worktreeResult = null;
+        if (worktree) {
+            notice(`正在删除 worktree「${worktree.name}」…`);
+            worktreeResult = await cleanUpWorktrees([worktree]);
+        }
+        notice(deleteSummary({ deletedCount: 1, failedSessions: [], worktreeResult }));
+    } else {
+        renderDeleteButton();
+        renderList();
+        notice(deleteSummary({ deletedCount: 0, failedSessions: res.failed }));
+    }
+}
+
+const batchDelete = { busy: false, gen: 0, probe: null, wtTouched: false, sessions: [] };
+
+function batchSelectedSessions() {
+    const ids = new Set([...$('batch-list').querySelectorAll('input[type="checkbox"]:checked')].map((x) => x.value));
+    return batchDelete.sessions.filter((s) => ids.has(s.id));
+}
+
+function renderBatchState() {
+    const selected = batchSelectedSessions();
+    const n = selected.length;
+    $('batch-count').textContent = n ? `已选 ${n} 个` : '未选择';
+    const submit = $('batch-submit');
+    submit.disabled = batchDelete.busy || n === 0;
+    if (!batchDelete.busy) setButton(submit, null, n ? `永久删除（${n}）` : '永久删除', false);
+
+    const rowEl = $('batch-worktree-row');
+    const box = $('batch-worktree');
+    const label = $('batch-worktree-label');
+    const note = $('batch-worktree-note');
+    const orphans = orphanedWorktrees(selected, state.sessions.values());
+    if (!orphans.length) { rowEl.hidden = true; return; }
+    if (batchDelete.probe?.status === 'checking') {
+        rowEl.hidden = false;
+        box.disabled = true;
+        box.checked = false;
+        label.textContent = '同时删除关联的 worktree';
+        note.textContent = '正在检查本机残留的 worktree…';
+        return;
+    }
+    const byKey = batchDelete.probe?.byKey ?? new Map();
+    const existing = [];
+    const offline = [];
+    for (const c of orphans) {
+        const entry = byKey.get(`${c.machineKey}\u0000${c.path}`);
+        if (entry?.status === 'existing') existing.push(entry.worktree);
+        else if (entry?.status === 'offline') offline.push(c);
+    }
+    if (existing.length) {
+        const wasUnavailable = rowEl.hidden || box.disabled;
+        rowEl.hidden = false;
+        box.disabled = batchDelete.busy;
+        if (wasUnavailable && !batchDelete.wtTouched) box.checked = true;
+        label.textContent = existing.length === 1
+            ? `同时删除 worktree「${existing[0].name}」`
+            : `同时删除 ${existing.length} 个残留的 worktree`;
+        const names = existing.slice(0, 4).map((w) => w.name).join('、') + (existing.length > 4 ? ' 等' : '');
+        note.textContent = (existing.length === 1 ? '分支已合并的话一并删除，没合并的保留。' : `${names}；分支已合并的一并删除，没合并的保留。`)
+            + (offline.length ? `（另有 ${offline.length} 个所在电脑离线，跳过）` : '');
+    } else if (offline.length) {
+        rowEl.hidden = false;
+        box.disabled = true;
+        box.checked = false;
+        label.textContent = '无法删除关联的 worktree';
+        note.textContent = `关联的 ${offline.length} 个 worktree 所在电脑离线，无法检查或删除。`;
+    } else {
+        rowEl.hidden = true;
+    }
+}
+
+/** Open the batch-delete modal for archived sessions, optionally pre-selecting ones at least `preselectDays` old. */
+function openBatchDelete(preselectDays = null) {
+    if (state.deletingBatch) return;
+    const allArchived = archivedSessions();
+    const deletable = allArchived.filter(canDeleteSession);
+    if (!deletable.length) { notice('没有可删除的已归档会话'); return; }
+
+    const gen = ++batchDelete.gen;
+    batchDelete.busy = false;
+    batchDelete.wtTouched = false;
+    batchDelete.sessions = deletable;
+    const skipped = allArchived.length - deletable.length;
+    $('batch-skipped').textContent = skipped ? `另有 ${skipped} 个 Bot 或任务会话不支持删除，已自动排除。` : '';
+
+    const week = archivedBefore(deletable, 7);
+    const month = archivedBefore(deletable, 30);
+    const initial = preselectDays != null ? new Set(archivedBefore(deletable, preselectDays).map((s) => s.id)) : new Set();
+
+    const listEl = $('batch-list');
+    listEl.replaceChildren(...deletable.map((s) => {
+        const item = el('label', 'batch-item');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = s.id;
+        cb.checked = initial.has(s.id);
+        cb.onchange = renderBatchState;
+        const { project, worktree } = place(s);
+        const where = worktree ? `${project} / ${worktree}` : project;
+        const sub = [s.meta.host, where, shortDate(archivedAt(s))].filter(Boolean).join(' · ');
+        const info = el('span', 'info');
+        info.append(el('span', 'name', sessionTitle(s)), el('span', 'sub', sub));
+        item.append(cb, info);
+        return item;
+    }));
+
+    const pickIds = (ids) => {
+        const set = new Set(ids);
+        for (const cb of listEl.querySelectorAll('input[type="checkbox"]')) cb.checked = set.has(cb.value);
+        renderBatchState();
+    };
+    const pickBtn = (text, ids) => {
+        const b = el('button', null, text);
+        b.type = 'button';
+        b.disabled = ids !== null && ids.length === 0;
+        b.onclick = () => pickIds(ids ?? []);
+        return b;
+    };
+    $('batch-picks').replaceChildren(
+        pickBtn(`全选（${deletable.length}）`, deletable.map((s) => s.id)),
+        pickBtn(`7 天前（${week.length}）`, week.map((s) => s.id)),
+        pickBtn(`30 天前（${month.length}）`, month.map((s) => s.id)),
+        pickBtn('全不选', null),
+    );
+
+    // Probe every worktree that could become orphaned under any selection once per (machine, repo).
+    const allCandidates = orphanedWorktrees(deletable, state.sessions.values());
+    batchDelete.probe = { status: allCandidates.length ? 'checking' : 'done', byKey: new Map() };
+    $('batch-cancel').disabled = false;
+    renderBatchState();
+
+    const dialog = $('batch-delete-dialog');
+    dialog.showModal();
+
+    if (allCandidates.length) {
+        refreshMachines().then((machines) => probeWorktrees(
+            allCandidates,
+            machines,
+            (m, repo) => listWorktrees(repo, (command, cwd) => machineBash(m, command, cwd)),
+        )).then((res) => {
+            if (!dialog.open || gen !== batchDelete.gen) return;
+            const byKey = new Map();
+            const key = (w) => `${w.machineKey}\u0000${w.candidatePath ?? w.path}`;
+            for (const w of res.existing) byKey.set(key(w), { status: 'existing', worktree: w });
+            for (const w of res.missing) byKey.set(key(w), { status: 'missing' });
+            for (const w of res.offline) byKey.set(key(w), { status: 'offline' });
+            for (const w of res.failed) byKey.set(key(w), { status: 'failed' });
+            batchDelete.probe = { status: 'done', byKey };
+            renderBatchState();
+        }, () => {
+            if (!dialog.open || gen !== batchDelete.gen) return;
+            batchDelete.probe = { status: 'done', byKey: new Map() };
+            renderBatchState();
+        });
+    }
+}
+
+async function submitBatchDelete(e) {
+    e.preventDefault();
+    if (batchDelete.busy) return;
+    // Re-check against live state in case a session was resumed or deleted while the dialog was open.
+    const targets = batchSelectedSessions()
+        .map((s) => state.sessions.get(s.id))
+        .filter((s) => canDeleteSession(s) && !s.deleting && !state.deletingIds.has(s.id));
+    if (!targets.length) { $('batch-delete-dialog').close(); return; }
+
+    const wtRow = $('batch-worktree-row');
+    const wtBox = $('batch-worktree');
+    const wantWorktrees = !wtRow.hidden && wtBox.checked && !wtBox.disabled;
+
+    batchDelete.busy = true;
+    state.deletingBatch = true;
+    for (const s of targets) state.deletingIds.add(s.id);
+    renderDeleteButton();
+    const dialog = $('batch-delete-dialog');
+    for (const el of dialog.querySelectorAll('input, button')) el.disabled = true;
+    setButton($('batch-submit'), null, `正在删除 0/${targets.length}…`, true);
+
+    let res;
+    try {
+        res = await deleteSessionsOnServer(
+            targets,
+            (s) => api('DELETE', `/v1/sessions/${encodeURIComponent(s.id)}`),
+            { concurrency: 4, onProgress: ({ done, total }) => setButton($('batch-submit'), null, `正在删除 ${done}/${total}…`, true) },
+        );
+    } finally {
+        batchDelete.busy = false;
+        state.deletingBatch = false;
+        for (const s of targets) state.deletingIds.delete(s.id);
+        renderDeleteButton();
+    }
+
+    dialog.close();
+    if (res.deleted.length) {
+        // Compute orphaned worktrees BEFORE forgetting so any session that failed to delete keeps its worktree protected.
+        const byKey = batchDelete.probe?.byKey ?? new Map();
+        const worktreesToRemove = wantWorktrees
+            ? orphanedWorktrees(res.deleted, state.sessions.values())
+                .map((c) => byKey.get(`${c.machineKey}\u0000${c.path}`))
+                .filter((entry) => entry?.status === 'existing')
+                .map((entry) => entry.worktree)
+            : [];
+        forgetSessions(res.deleted.map((s) => s.id));
+        let worktreeResult = null;
+        if (worktreesToRemove.length) {
+            notice(`已删除 ${res.deleted.length} 个会话，正在清理 ${worktreesToRemove.length} 个 worktree…`);
+            worktreeResult = await cleanUpWorktrees(worktreesToRemove);
+        }
+        notice(deleteSummary({ deletedCount: res.deleted.length, failedSessions: res.failed, worktreeResult }));
+    } else {
+        notice(deleteSummary({ deletedCount: 0, failedSessions: res.failed }));
+    }
+}
+
 // ---------- List menu ----------
 // Right-click on a session, a computer, a project/worktree or 已归档. Found
 // through the DOM (rows carry data-id), so the list's rendering stays as is.
@@ -3410,6 +3826,7 @@ function sessionMenu(s) {
             return { label: s.forking ? '正在 fork…' : 'Fork 会话', icon: 'fork', hidden: !f.show, disabled: s.forking || !f.ok, action: () => forkSession(s) };
         })(),
         { label: s.archiving ? '正在归档…' : '归档', icon: 'archive', danger: true, hidden: archived, disabled: s.archiving, action: () => archiveSession(s) },
+        { label: s.deleting ? '正在删除…' : '删除', icon: 'trash', danger: true, hidden: !canDeleteSession(s), disabled: s.deleting || state.deletingBatch, action: () => deleteSessionFlow(s) },
     ];
 }
 
@@ -3425,7 +3842,16 @@ function groupMenu(head) {
     const box = head.parentElement;
     const sessions = sessionsIn(box);
     const fold = foldItem(head);
-    if (box.classList.contains('archived')) return [fold];
+    if (box.classList.contains('archived')) {
+        const deletable = archivedSessions().filter(canDeleteSession);
+        const monthOld = archivedBefore(deletable, 30);
+        return [
+            fold,
+            '-',
+            { label: `清理 30 天前（${monthOld.length}）`, icon: 'trash', danger: true, hidden: !monthOld.length, disabled: state.deletingBatch, action: () => openBatchDelete(30) },
+            { label: '批量删除…', icon: 'trash', danger: true, hidden: !deletable.length, disabled: state.deletingBatch, action: () => openBatchDelete() },
+        ];
+    }
     const read = { label: '全部标为已读', icon: 'copied', hidden: !sessions.some(hasUnseen), action: () => markSeen(sessions) };
     const first = sessions[0];
     if (head.classList.contains('group-head')) {
@@ -3859,6 +4285,7 @@ $('subagent-close').innerHTML = iconSvg('close');
 $('subagent-icon').innerHTML = iconSvg('agent');
 setButton($('back'), 'back', '返回');
 setButton($('archive'), 'archive', '归档');
+setButton($('delete-session'), 'trash', '删除');
 setButton($('attach'), 'image', '');
 setButton($('send'), 'send', '发送');
 setButton($('stop'), 'stop', '停止');
@@ -3995,6 +4422,12 @@ $('new-worktree').addEventListener('change', () => {
 $('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
 $('archive-cancel').onclick = () => $('archive-dialog').close();
+$('delete-session').onclick = deleteCurrent;
+$('delete-cancel').onclick = () => $('delete-dialog').close();
+$('batch-cancel').onclick = () => { if (!batchDelete.busy) $('batch-delete-dialog').close(); };
+$('batch-delete-dialog').addEventListener('cancel', (e) => { if (batchDelete.busy) e.preventDefault(); });
+$('batch-worktree').addEventListener('change', () => { batchDelete.wtTouched = true; });
+$('batch-delete-form').addEventListener('submit', submitBatchDelete);
 $('resume').onclick = () => resumeSession(state.current);
 $('send').onclick = () => send();
 $('attach').onclick = () => $('file').click();
