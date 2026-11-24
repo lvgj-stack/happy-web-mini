@@ -43,7 +43,7 @@
 **Interfaces:**
 - Produces:
   - `replyUsage(raw) -> { key: string, input: number, output: number, cacheWrite: number, cacheRead: number, time: number|null } | null`
-  - `localDay(ms: number) -> 'YYYY-MM-DD'`（本地时区）
+  - （`localDay(ms) -> 'YYYY-MM-DD'` 已在 `web/time.js` 里，按本地时区；从 `./time.js` import，不要另写）
   - `tokenStats(cached) -> { see(raw, row): boolean, days: Record<string, [input, output, cacheWrite, cacheRead]>, toJSON(): object }`
     `row` 是 `{ seq, raw, createdAt }`；`cached` 是之前 `toJSON()` 的结果或 null。
 
@@ -76,7 +76,6 @@ test('replyUsage: session envelope, subagent included, Codex usage-only service 
     assert.equal(replyUsage({ role: 'user', content: { type: 'text', text: 'x' } }), null);
 });
 test('replyUsage: legacy Claude output keyed by message id', () => { /* role agent, content.type output, data.type assistant, message.id 'msg_1' -> key 'm|msg_1' */ });
-test('localDay: local calendar date', () => { assert.equal(localDay(at), '2026-11-03'); });
 test('tokenStats: the same reply split over several messages counts once', () => {
     const st = tokenStats(null);
     assert.equal(st.see(env(u), { seq: 1, createdAt: at }), true);
@@ -126,7 +125,7 @@ test('tokenStats: bad cache starts empty', () => { assert.deepEqual(tokenStats({
     `today` 为周日 `new Date(2026, 10, 29)` 时最后一列 7 天全非 null；跨年 `new Date(2027, 0, 1)` 时最后一列含 `'2026-12-28'`；某列含 11 月 1 日 → `month === '11月'`。
   - `formatTokens`：`8240 → '8,240'`，`125000 → '12.5 万'`，`48200000 → '4,820 万'`，`1240000000 → '12.4 亿'`，`100000000 → '1 亿'`。
 - [ ] **Step 2: 跑测试确认失败** — `cd web && node --test test/heatmap.test.mjs`。
-- [ ] **Step 3: 实现 `web/heatmap.js`**（日期用本地时间的 `new Date(y, m, d)` 逐天加减，复用 `tokens.js` 的 `localDay`）。
+- [ ] **Step 3: 实现 `web/heatmap.js`**（日期用本地时间的 `new Date(y, m, d)` 逐天加减，复用 `./time.js` 的 `localDay`；不要 import `tokens.js`）。
 - [ ] **Step 4: 跑测试** — `cd web && npm test`，全部 PASS。
 - [ ] **Step 5: 提交** — `git commit -m "feat(web): 用量热力图的汇总和分档"`
 
@@ -139,7 +138,7 @@ test('tokenStats: bad cache starts empty', () => { assert.deepEqual(tokenStats({
 - Modify: `web/README.md`（新增「用量」一节 + 「文件」一节加 `tokens.js`、`heatmap.js`）、`web/AGENTS.md`（localStorage 键加 `happy.usage.<会话 id>`；「扫历史的两套缓存」改成三套并写用量的去重规则和不随删除清理）
 
 **Interfaces:**
-- Consumes: `replyUsage`/`tokenStats`/`localDay`（Task 1），`summarize`/`thresholds`/`levelOf`/`heatmapWeeks`/`formatTokens`（Task 2），`syncLines`/`LATEST`（`lines.js`），`agentFlavor`/`AGENT_NAMES`（`agentIcons.js`）。
+- Consumes: `replyUsage`/`tokenStats`（Task 1），`summarize`/`thresholds`/`levelOf`/`heatmapWeeks`/`formatTokens`（Task 2），`syncLines`/`LATEST`（`lines.js`），`agentFlavor`/`AGENT_NAMES`（`agentIcons.js`）。
 
 页面：
 - 侧栏头部 `#settings-open` 前加 `<button id="usage-open" class="icon-btn" aria-label="用量" title="用量">`。
@@ -164,8 +163,8 @@ test('tokenStats: bad cache starts empty', () => { assert.deepEqual(tokenStats({
 - `logout()`：按前缀删除的那一行加 `happy.usage.`；`state.usageGen++`，重置 `usage` 相关状态。
 
 - [ ] **Step 1: 实现上面的改动**；`cd web && node --check app.js && npm test`，预期通过。
-- [ ] **Step 2: 打包检查** — `cd desktop && npm run check`（`node build.mjs --check`），预期无缺文件，`tokens.js`、`heatmap.js`、`chart-bar.mjs` 都在。
-- [ ] **Step 3: 浏览器里看** — `cd web && npm start`，用 Playwright 打开 http://localhost:8080，没有真实账号时在控制台把几个构造的 `happy.usage.<id>` 写进 localStorage 并直接调用渲染来截图：桌面宽度和 390px 宽各一张，确认最后一列在右侧可见、颜色分得清、点格子明细会变。截图放 `/tmp/claude-0/apk/` 并说明未在真实账号下验证（如属实）。
+- [ ] **Step 2（合并后由主控做）: 打包检查** — `cd desktop && npm run check`（`node build.mjs --check`），预期无缺文件，`tokens.js`、`heatmap.js`、`chart-bar.mjs` 都在。
+- [ ] **Step 3（合并后由主控做）: 浏览器里看** — `cd web && npm start`，用 Playwright 打开 http://localhost:8080，没有真实账号时在控制台把几个构造的 `happy.usage.<id>` 写进 localStorage 并直接调用渲染来截图：桌面宽度和 390px 宽各一张，确认最后一列在右侧可见、颜色分得清、点格子明细会变。截图放 `/tmp/claude-0/apk/` 并说明未在真实账号下验证（如属实）。
 - [ ] **Step 4: 更新 `web/README.md`、`web/AGENTS.md`**（见 Files）。
 - [ ] **Step 5: 提交** — `git commit -m "feat(web): 新增用量页，显示 token 总数和每日热力图"`
 

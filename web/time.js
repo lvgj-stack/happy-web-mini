@@ -15,3 +15,9 @@ export function messageTime(ms, now = Date.now()) {
     if (d.getFullYear() === today.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日 ${clock}`;
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${clock}`;
 }
+
+/** The local calendar day of a moment, as "2026-11-03". */
+export function localDay(ms) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

@@ -1,7 +1,7 @@
 // node --test: when a message was sent, as the chat shows it.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { messageTime } from '../time.js';
+import { localDay, messageTime } from '../time.js';
 
 const now = new Date(2026, 10, 6, 15, 0).getTime(); // 2026-11-06 15:00 local
 
@@ -20,4 +20,9 @@ test('no time, nothing to show', () => {
     assert.equal(messageTime(0, now), '');
     assert.equal(messageTime(undefined, now), '');
     assert.equal(messageTime(NaN, now), '');
+});
+
+test('localDay: the local calendar date, zero-padded', () => {
+    assert.equal(localDay(new Date(2026, 10, 3, 23, 30).getTime()), '2026-11-03');
+    assert.equal(localDay(new Date(2027, 0, 1, 0, 0).getTime()), '2027-01-01');
 });
