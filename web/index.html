@@ -559,6 +559,7 @@
   #new-session h2, #archive-dialog h2 { font: 400 20px/1.4 var(--serif); margin: 0 0 16px; }
   #new-session label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
   #new-session select.field { appearance: auto; }
+  #new-worktree-name { margin-top: 8px; }
   #new-session .actions, #archive-dialog .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 20px; }
   #new-session .error { margin: 12px 0 0; }
   #archive-dialog { width: min(400px, calc(100vw - 32px)); }
@@ -882,6 +883,7 @@
     <div class="recent" id="new-recent"></div>
     <label for="new-worktree">Worktree</label>
     <select id="new-worktree" class="field"></select>
+    <input id="new-worktree-name" class="field" spellcheck="false" autocomplete="off" placeholder="worktree 名字（留空自动生成）" aria-label="Worktree 名字" hidden>
     <label for="new-agent">Agent</label>
     <select id="new-agent" class="field"></select>
     <p class="error" id="new-error"></p>

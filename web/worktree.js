@@ -67,16 +67,56 @@ export async function listWorktrees(path, bash) {
 }
 
 /**
+ * Why a custom worktree / branch name cannot be used, or '' when it is valid
+ * (or blank, meaning random). A worktree lives as one folder under
+ * `.dev/worktree/<name>` with the same branch name, so it must be a single path
+ * segment, a valid git branch name, and safe for sh / cmd.exe.
+ */
+export function worktreeNameError(raw) {
+    const name = typeof raw === 'string' ? raw.trim() : '';
+    if (!name) return '';
+    if (name.includes('/') || name.includes('\\')) return 'worktree 名字不能包含 / 或 \\';
+    if (/\s/.test(name)) return 'worktree 名字不能包含空格';
+    if (name === 'HEAD') return 'worktree 名字不能叫 HEAD';
+    if (name.startsWith('-') || name.startsWith('.') || name.endsWith('.') || /\.lock$/i.test(name) || name.includes('..')) {
+        return 'worktree 名字不能以 - 或 . 开头，也不能以 . / .lock 结尾或包含 ..';
+    }
+    if (!/^[\p{L}\p{N}_][\p{L}\p{N}._-]*$/u.test(name)) {
+        return 'worktree 名字只能包含字母、数字、中文、下划线、短横线和点';
+    }
+    return '';
+}
+
+const quote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
+function createWorktreeError(why, custom) {
+    if (/not a git repository/i.test(why)) return new Error('这个目录不是 git 仓库');
+    if (custom) {
+        if (/a branch named .* already exists/i.test(why)) return new Error(`分支「${custom}」已存在，请换个名字`);
+        if (/already exists/i.test(why)) return new Error(`worktree「${custom}」已存在，请换个名字`);
+    }
+    return new Error(why || '建 worktree 失败');
+}
+
+/**
  * Make a new worktree for the repository `path` is in; resolves to { path, branch }.
  * Created at the repository's top level, so a subdirectory or another worktree
- * still lands in `<repo>/.dev/worktree/<name>`. A taken name is retried as `-2` to `-4`.
+ * still lands in `<repo>/.dev/worktree/<name>`. When `name` is omitted or blank,
+ * a random `adjective-noun` name is picked and retried as `-2` to `-4` if taken;
+ * a custom `name` is used as-is and fails if already taken.
  * One `bash` call does it all, each being a round trip through the server to the
  * daemon; a Windows daemon runs commands in cmd.exe, so there it takes one per step.
  */
-export async function createWorktree(path, bash, random = Math.random, { windows = false } = {}) {
-    const name = randomWorktreeName(random);
-    if (windows) return createWorktreeStepwise(path, bash, name);
-    const branches = [name, `${name}-2`, `${name}-3`, `${name}-4`].join(' ');
+export async function createWorktree(path, bash, random = Math.random, { windows = false, name = '' } = {}) {
+    const custom = typeof name === 'string' ? name.trim() : '';
+    if (custom) {
+        const err = worktreeNameError(custom);
+        if (err) throw new Error(err);
+    }
+    const baseName = custom || randomWorktreeName(random);
+    const candidates = custom ? [custom] : [baseName, `${baseName}-2`, `${baseName}-3`, `${baseName}-4`];
+    if (windows) return createWorktreeStepwise(path, bash, candidates, custom);
+    const branches = candidates.map(quote).join(' ');
     // POSIX sh (the daemon runs it with exec): prints the repository and the branch it made.
     const script = [
         'top=$(git rev-parse --show-toplevel) || exit 1',
@@ -92,12 +132,10 @@ export async function createWorktree(path, bash, random = Math.random, { windows
     const r = await bash(script, repoOf(path));
     const [base, branch] = r.stdout.trim().split('\n');
     if (r.success && base && branch) return { path: `${base}/${WORKTREE_DIR}/${branch}`, branch };
-    const why = `${r.stderr}`.trim();
-    if (/not a git repository/i.test(why)) throw new Error('这个目录不是 git 仓库');
-    throw new Error(why || '建 worktree 失败');
+    throw createWorktreeError(`${r.stderr}`.trim(), custom);
 }
 
-async function createWorktreeStepwise(path, bash, name) {
+async function createWorktreeStepwise(path, bash, candidates, custom) {
     const top = await bash('git rev-parse --show-toplevel', repoOf(path));
     if (!top.success) {
         const why = `${top.stderr}`.trim();
@@ -105,12 +143,12 @@ async function createWorktreeStepwise(path, bash, name) {
     }
     const base = repoOf(top.stdout.trim());
     let r;
-    for (const branch of [name, `${name}-2`, `${name}-3`, `${name}-4`]) {
+    for (const branch of candidates) {
         r = await bash(`git worktree add -b ${branch} ${WORKTREE_DIR}/${branch}`, base);
         if (r.success) return { path: `${base}/${WORKTREE_DIR}/${branch}`, branch };
         if (!/already exists/.test(r.stderr)) break;
     }
-    throw new Error(`${r.stderr}`.trim() || '建 worktree 失败');
+    throw createWorktreeError(`${r.stderr}`.trim(), custom);
 }
 
 /** The worktree checkout a path is in (`<repo>/.dev/worktree/<name>`), or null for any other path. */
@@ -120,8 +158,6 @@ export function worktreeOf(path) {
     const name = path.slice(at + WORKTREE_MARKER.length).split('/')[0];
     return name ? path.slice(0, at + WORKTREE_MARKER.length) + name : null;
 }
-
-const quote = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 /**
  * Remove a worktree and, when it is merged, its branch (`git branch -d`; an

@@ -109,6 +109,7 @@
   CLI 会把复制来的历史回放进新会话。spawn 回 `requestToApproveDirectoryCreation`（目录没了）时同样先重建 worktree，不新建空目录。
 - 新建会话的 Worktree 选中哪项（`worktreeSelection`）：本次对话框里手动选过且还能选的 → 目录本身就是某个 worktree 时选它 →
   设置里的默认值。手动选择在打开对话框、换电脑、启动成功后清掉，改目录不清（打字过程中不会被重置）。
+  选「新建 worktree」时可指定名字（`worktreeNameError` 校验单层目录 + git 分支名，留空自动随机）；指定名字已存在时直接报错，不自动加 `-2`。
 - Codex 的模型列表经会话的 `bash` RPC 在那台电脑上查 `codex app-server`（`codexModels.js`），不用升级 Happy CLI。
 - CLI 不在线时归档：网页自己用 `update-metadata` 写 `lifecycleState: "archived"`。
 

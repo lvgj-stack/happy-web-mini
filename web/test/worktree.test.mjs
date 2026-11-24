@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeOf, worktreeSelection } from '../worktree.js';
+import { createWorktree, listWorktrees, parseWorktreeList, randomWorktreeName, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeNameError, worktreeOf, worktreeSelection } from '../worktree.js';
 
 /** The daemon's `bash` RPC, locally: same result shape. */
 const bash = (command, cwd) => new Promise((resolve) => {
@@ -200,4 +200,57 @@ test('worktreeSelection: a hand pick, then the directory as a checkout, then the
     assert.equal(pick({ preferNew: true, choice: '/r/.dev/worktree/gone' }), NEW);
     // Not a git repository: 新建 worktree is disabled, so the directory.
     assert.equal(worktreeSelection({ values: [''], newValue: NEW, directory: '/x', preferNew: true, choice: NEW }), '');
+});
+
+test('worktreeNameError: blank means random; accepts single-segment git branch names and rejects unsafe ones', () => {
+    for (const ok of ['', '   ', null, undefined, 'fix-login', '  fix-login  ', 'feat_v2.1', '_tmp', '123', '修复-登录']) {
+        assert.equal(worktreeNameError(ok), '', `expected valid: ${JSON.stringify(ok)}`);
+    }
+    assert.match(worktreeNameError('feat/login'), /\/|\\/);
+    assert.match(worktreeNameError('a\\b'), /\/|\\/);
+    assert.match(worktreeNameError('fix bug'), /空格/);
+    assert.match(worktreeNameError('a\nb'), /空格/);
+    assert.match(worktreeNameError('HEAD'), /HEAD/);
+    for (const bad of ['-b', '.hidden', '.', '..', 'a..b', 'foo.', 'foo.lock', 'foo.LOCK']) {
+        assert.notEqual(worktreeNameError(bad), '', `expected invalid: ${bad}`);
+    }
+    for (const bad of ['a$b', 'a;b', 'a@b', 'a:b', 'a*b', "a'b", 'a"b', 'a~b', 'a^b']) {
+        assert.notEqual(worktreeNameError(bad), '', `expected invalid: ${bad}`);
+    }
+});
+
+test('createWorktree with a custom name uses it as-is and fails when taken (no -2)', async () => {
+    const made = await createWorktree(join(repo, 'sub'), bash, fixed(0), { name: '  fix-login  ' });
+    assert.deepEqual(made, { path: `${repo}/.dev/worktree/fix-login`, branch: 'fix-login' });
+    assert.equal((await bash('git branch --show-current', made.path)).stdout.trim(), 'fix-login');
+
+    // Existing branch: rejected clearly without creating fix-login-2.
+    await assert.rejects(createWorktree(repo, bash, fixed(0), { name: 'fix-login' }), /分支「fix-login」已存在/);
+    assert.ok(!existsSync(`${repo}/.dev/worktree/fix-login-2`));
+
+    // Existing non-empty directory without a branch: rejected as existing worktree.
+    mkdirSync(`${repo}/.dev/worktree/occupied`, { recursive: true });
+    writeFileSync(`${repo}/.dev/worktree/occupied/file.txt`, 'x');
+    await assert.rejects(createWorktree(repo, bash, fixed(0), { name: 'occupied' }), /worktree「occupied」已存在/);
+
+    // Unicode name works too.
+    const cjk = await createWorktree(repo, bash, fixed(0), { name: '修复-登录' });
+    assert.deepEqual(cjk, { path: `${repo}/.dev/worktree/修复-登录`, branch: '修复-登录' });
+
+    // Invalid name fails before touching the daemon.
+    let called = false;
+    await assert.rejects(createWorktree(repo, async () => { called = true; }, fixed(0), { name: 'feat/login' }), /不能包含/);
+    assert.equal(called, false);
+});
+
+test('createWorktree with a custom name on Windows uses plain git commands and does not retry -2', async () => {
+    const calls = [];
+    const logged = (command, cwd) => { calls.push(command); return bash(command, cwd); };
+    const made = await createWorktree(join(repo, 'sub'), logged, fixed(0), { windows: true, name: 'win-custom' });
+    assert.deepEqual(made, { path: `${repo}/.dev/worktree/win-custom`, branch: 'win-custom' });
+    assert.deepEqual(calls, ['git rev-parse --show-toplevel', 'git worktree add -b win-custom .dev/worktree/win-custom']);
+
+    calls.length = 0;
+    await assert.rejects(createWorktree(repo, logged, fixed(0), { windows: true, name: 'win-custom' }), /分支「win-custom」已存在/);
+    assert.deepEqual(calls, ['git rev-parse --show-toplevel', 'git worktree add -b win-custom .dev/worktree/win-custom']);
 });

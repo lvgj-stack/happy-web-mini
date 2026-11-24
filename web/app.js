@@ -28,7 +28,7 @@ import { forkAvailability, forkCopyRequest, forkSpawnParams } from './fork.js';
 import { messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
-import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeOf, worktreeSelection } from './worktree.js';
+import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeNameError, worktreeOf, worktreeSelection } from './worktree.js';
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
@@ -3562,6 +3562,7 @@ function renderWorktreeSelect() {
     const values = [...select.options].filter((o) => !o.disabled).map((o) => o.value);
     select.value = worktreeSelection({ values, choice: newSession.worktreeChoice, directory,
         preferNew: readWorktreeDefault(localStorage) === 'new', newValue: WT_NEW });
+    $('new-worktree-name').hidden = select.value !== WT_NEW;
 }
 
 function onNewDirChanged() {
@@ -3593,6 +3594,8 @@ async function openNewSession(preferMachineId, dir) {
     const dialog = $('new-session');
     $('new-error').textContent = '';
     $('new-machine').replaceChildren(el('option', null, '正在载入…'));
+    $('new-worktree-name').value = '';
+    $('new-worktree-name').hidden = true;
     $('new-submit').disabled = true;
     newSession.worktreeChoice = undefined;
     if (!dialog.open) dialog.showModal();
@@ -3668,6 +3671,13 @@ async function submitNewSession(e) {
         return;
     }
     const worktree = $('new-worktree').value;
+    const worktreeName = worktree === WT_NEW ? $('new-worktree-name').value.trim() : '';
+    const nameErr = worktreeNameError(worktreeName);
+    if (nameErr) {
+        $('new-error').textContent = nameErr;
+        $('new-worktree-name').focus();
+        return;
+    }
     newSession.busy = true;
     const button = $('new-submit');
     button.disabled = true;
@@ -3678,7 +3688,7 @@ async function submitNewSession(e) {
         if (worktree === WT_NEW) {
             button.textContent = '正在建 worktree';
             made = await createWorktree(directory, (command, cwd) => machineBash(m, command, cwd), Math.random,
-                { windows: m.meta.platform === 'win32' });
+                { windows: m.meta.platform === 'win32', name: worktreeName });
             directory = made.path;
             newSession.worktreesFor = null; // the list has one more now
             button.textContent = '正在启动';
@@ -3701,6 +3711,7 @@ async function submitNewSession(e) {
         const s = await waitForSession(r.sessionId);
         $('new-session').close();
         $('new-dir').value = '';
+        $('new-worktree-name').value = '';
         newSession.worktreeChoice = undefined;
         if (s) openSession(s); else notice('会话已启动，稍后会出现在列表里。');
     } catch (err) {
@@ -3977,7 +3988,10 @@ $('new-open').onclick = () => openNewSession();
 $('new-form').addEventListener('submit', submitNewSession);
 $('new-cancel').onclick = () => $('new-session').close();
 $('new-machine').onchange = () => { $('new-dir').value = ''; newSession.worktreeChoice = undefined; renderNewForm(); };
-$('new-worktree').addEventListener('change', () => { newSession.worktreeChoice = $('new-worktree').value; });
+$('new-worktree').addEventListener('change', () => {
+    newSession.worktreeChoice = $('new-worktree').value;
+    $('new-worktree-name').hidden = $('new-worktree').value !== WT_NEW;
+});
 $('new-dir').addEventListener('input', () => onNewDirChanged());
 $('archive').onclick = archiveCurrent;
 $('archive-cancel').onclick = () => $('archive-dialog').close();
