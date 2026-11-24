@@ -631,19 +631,28 @@
   body.desktop-mac.side-collapsed #chat-head, body.desktop-mac.side-collapsed #settings-page,
   body.desktop-mac.side-collapsed:not(.links-hidden):not(.in-settings) main:has(> #links:not([hidden])) #chat-head { padding-left: 32px; }
 
-  /* Computers are sidebar sections (as in Finder): a small heading, no card */
-  body.desktop-mac .machine, body.desktop-mac #app.wallpapered .machine { background: transparent; border: 0; border-radius: 0; overflow: visible; }
-  body.desktop-mac .machine + .machine, body.desktop-mac .empty-list + .machine { margin-top: 12px; }
-  body.desktop-mac .group-head, body.desktop-mac #app.wallpapered .group-head { gap: 6px; padding: 4px 10px; border-radius: 6px; background: transparent; color: var(--muted); }
+  /* Each computer is a card of frosted white on the glass, its name on a tinted strip at the top:
+     what is inside the card is on that computer. (Tried Finder-style section headings first; with
+     a tree under each one, a small grey heading read as lighter than its own bold projects.) */
+  body.desktop-mac .machine, body.desktop-mac #app.wallpapered .machine { background: rgba(255, 255, 255, .5); border: 0; border-radius: 9px; overflow: hidden; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .1), 0 .5px 2px rgba(0, 0, 0, .04); }
+  body.desktop-mac .machine + .machine, body.desktop-mac .empty-list + .machine { margin-top: 10px; }
+  body.desktop-mac .group-head, body.desktop-mac #app.wallpapered .group-head { gap: 7px; padding: 6px 10px; border-radius: 0; background: rgba(38, 42, 39, .055); box-shadow: 0 .5px 0 rgba(0, 0, 0, .08); }
   body.desktop-mac .group-head:hover, body.desktop-mac #app.wallpapered .group-head:hover,
-  body.desktop-mac .group-head.menu-open { background: var(--glass-hover); }
-  body.desktop-mac .group-head svg { width: 14px; height: 14px; color: var(--muted); }
-  body.desktop-mac .group-head .name { font-size: 12px; font-weight: 600; color: var(--muted); }
-  body.desktop-mac .group-head .count { background: none; padding: 0; min-width: 0; font-size: 11px; }
-  /* the chevron shows on hover, and while folded so you can tell */
-  body.desktop-mac .group-head .chev { opacity: 0; transition: opacity .12s, transform .15s; }
-  body.desktop-mac .group-head:hover .chev, body.desktop-mac .group-head:focus-visible .chev, body.desktop-mac .collapsed > .group-head .chev { opacity: 1; }
-  body.desktop-mac .machine > .rows { padding: 2px 0 0; }
+  body.desktop-mac .group-head.menu-open { background: rgba(38, 42, 39, .09); }
+  body.desktop-mac .collapsed > .group-head { box-shadow: none; }
+  body.desktop-mac .group-head svg { width: 15px; height: 15px; color: var(--ink); }
+  body.desktop-mac .group-head .name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  body.desktop-mac .group-head .count { background: rgba(38, 42, 39, .08); font-size: 11px; line-height: 16px; min-width: 18px; padding: 0 5px; border-radius: 8px; }
+  body.desktop-mac .machine > .rows { padding: 4px; }
+  /* Inside the card the levels step down: project in medium weight with its green folder, worktree and chats regular */
+  body.desktop-mac .tree-head .name { font-weight: 500; }
+  body.desktop-mac .tree.worktree > .tree-head .name { font-weight: 400; }
+  /* 已归档 is not a computer: no card, a quiet line under them */
+  body.desktop-mac .machine.archived { background: transparent; box-shadow: none; overflow: visible; }
+  body.desktop-mac .machine.archived .group-head { background: transparent; box-shadow: none; border-radius: 6px; }
+  body.desktop-mac .machine.archived .group-head :is(svg, .name) { color: var(--muted); font-weight: 500; }
+  body.desktop-mac .machine.archived .group-head .count { background: none; padding: 0; min-width: 0; }
+  body.desktop-mac .machine.archived > .rows { padding: 2px 0 0; }
   body.desktop-mac .kind + .kind { border-top-color: var(--glass-rule); }
   body.desktop-mac .kind-head { font-size: 11px; padding: 6px 10px 2px; }
   body.desktop-mac .tree-head { padding: 4px 10px; font-size: 13px; }
