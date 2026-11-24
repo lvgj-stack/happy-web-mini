@@ -310,14 +310,21 @@
   .link-row { padding: 6px 8px 6px 26px; border-radius: 6px; transition: background .12s; }
   .link-row:hover { background: rgba(38, 42, 39, .04); }
   .link-row.flash { animation: flash 1.6s ease-out; }
-  .link-name { display: flex; align-items: flex-start; gap: 6px; color: var(--ink); text-decoration: none; font-size: 13.5px; line-height: 1.45; }
+  .link-head { display: flex; align-items: flex-start; gap: 4px; }
+  .link-name { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 6px; color: var(--ink); text-decoration: none; font-size: 13.5px; line-height: 1.45; }
   /* Long titles get two lines before they are cut. */
   .link-name .label { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
   .link-name .ext { flex: none; color: var(--muted); opacity: 0; transition: opacity .12s; }
-  .link-row:hover .ext, .link-name:focus-visible .ext { opacity: 1; }
+  .link-edit { flex: none; width: 20px; height: 20px; margin-top: -1px; justify-content: center; border-radius: 4px; color: var(--muted); opacity: 0; transition: opacity .12s, color .12s, background .12s; }
+  .link-edit svg { width: 13px; height: 13px; }
+  .link-row:hover .ext, .link-name:focus-visible .ext,
+  .link-row:hover .link-edit, .link-row:focus-within .link-edit { opacity: 1; }
+  .link-edit:hover, .link-edit:focus-visible { color: var(--ink); background: rgba(38, 42, 39, .08); }
   .link-name:hover { color: var(--moss); }
   .link-name:hover .ext { color: var(--moss); }
-  @media (hover: none) { .link-name .ext { opacity: 1; } }
+  @media (hover: none) { .link-name .ext, .link-edit { opacity: 1; } }
+  .link-input { width: 100%; font: 13.5px/1.45 var(--sans); color: var(--ink); background: #fff; border: 1px solid var(--moss); border-radius: 5px; padding: 2px 6px; }
+  .link-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(86, 115, 92, .18); }
   .link-src { display: block; max-width: 100%; margin-top: 2px; text-align: left; font-size: 12px; line-height: 1.4; color: var(--muted); }
   .link-src:hover { color: var(--ink); }
   .links-status { margin: 4px 0 0; padding: 0 8px; font-size: 12px; color: var(--muted); }

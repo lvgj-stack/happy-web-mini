@@ -224,3 +224,52 @@ export async function scanHistory({ tracker, loaded, cache, fetchPage, save, ali
         covered = { from: complete ? 0 : rows[0].seq, to: covered.to };
     }
 }
+
+const CUSTOM_NAME_MAX = 120;
+
+/** Read custom link names from localStorage JSON (`{ v: 1, names: { url: label } }`); tolerates junk. */
+export function readLinkNames(raw) {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.v !== 1 || !parsed.names || typeof parsed.names !== 'object' || Array.isArray(parsed.names)) return {};
+        const out = {};
+        for (const [url, name] of Object.entries(parsed.names)) {
+            if (typeof name !== 'string') continue;
+            const trimmed = name.trim().slice(0, CUSTOM_NAME_MAX);
+            if (trimmed) out[normalizeUrl(url)] = trimmed;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/** Serialize custom link names for localStorage. */
+export function writeLinkNames(names) {
+    const clean = {};
+    for (const [url, name] of Object.entries(names ?? {})) {
+        if (typeof name !== 'string') continue;
+        const trimmed = name.trim().slice(0, CUSTOM_NAME_MAX);
+        if (trimmed) clean[normalizeUrl(url)] = trimmed;
+    }
+    return JSON.stringify({ v: 1, names: clean });
+}
+
+/**
+ * Return a new custom-name map with `url` renamed to `next`.
+ * Passing blank text or the original `autoLabel` clears the override back to automatic.
+ */
+export function setLinkName(names, url, next, autoLabel = '') {
+    const key = normalizeUrl(url);
+    const out = { ...(names ?? {}) };
+    const trimmed = String(next ?? '').trim().slice(0, CUSTOM_NAME_MAX);
+    if (!trimmed || (autoLabel && trimmed === autoLabel)) delete out[key];
+    else out[key] = trimmed;
+    return out;
+}
+
+/** What a link row displays: the person's own name when set, else the automatic label. */
+export function linkLabel(item, names) {
+    return names?.[normalizeUrl(item.url)] || item.label;
+}

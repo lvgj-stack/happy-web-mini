@@ -1,7 +1,10 @@
 // node --test: links in a session, gathered for the side panel.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyLink, extractLinks, joinRanges, linkTracker, localPath, normalizeUrl, scanHistory } from '../links.js';
+import {
+    classifyLink, extractLinks, joinRanges, linkLabel, linkTracker, localPath,
+    normalizeUrl, readLinkNames, scanHistory, setLinkName, writeLinkNames,
+} from '../links.js';
 
 test('extract: markdown links keep their text, bare URLs have none', () => {
     assert.deepEqual(extractLinks('看 [需求 Spec](https://x.feishu.cn/docx/AbC123) 和 https://github.com/a/b/pull/3'), [
@@ -216,4 +219,24 @@ test('scan: stops quietly when no longer alive', async () => {
     const r = await scanHistory({ tracker: linkTracker(), loaded: { from: 11, to: 20, hasOlder: true }, cache: null, fetchPage, save: () => {}, alive: () => n++ < 1 });
     assert.equal(r.complete, false);
     assert.equal(calls.length, 1);
+});
+
+test('custom link names: read, write, override, clear back to automatic, tolerate junk', () => {
+    const doc = 'https://x.feishu.cn/docx/RmWCdo123';
+    assert.deepEqual(readLinkNames(null), {});
+    assert.deepEqual(readLinkNames('not json'), {});
+    assert.deepEqual(readLinkNames(JSON.stringify({ v: 99, names: { [doc]: '旧' } })), {});
+
+    let names = setLinkName({}, `${doc}/#heading`, '  推理网关设计文档  ', '文档 RmWCdo');
+    assert.deepEqual(names, { [doc]: '推理网关设计文档' });
+    assert.equal(linkLabel({ url: doc, label: '文档 RmWCdo' }, names), '推理网关设计文档');
+
+    // Round-trips through storage and normalizes URLs.
+    const reloaded = readLinkNames(writeLinkNames(names));
+    assert.deepEqual(reloaded, { [doc]: '推理网关设计文档' });
+
+    // Blank or equal to the automatic label clears the override.
+    assert.deepEqual(setLinkName(names, doc, '   ', '文档 RmWCdo'), {});
+    assert.deepEqual(setLinkName(names, doc, '文档 RmWCdo', '文档 RmWCdo'), {});
+    assert.equal(linkLabel({ url: doc, label: '文档 RmWCdo' }, {}), '文档 RmWCdo');
 });

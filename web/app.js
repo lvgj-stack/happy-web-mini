@@ -32,7 +32,7 @@ import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, rep
 import { activeSlash, applyCommand, searchCommands } from './commands.js';
 import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
-import { linkTracker, scanHistory } from './links.js';
+import { linkLabel, linkTracker, readLinkNames, scanHistory, setLinkName, writeLinkNames } from './links.js';
 import { compactCount, lineStats, syncLines } from './lines.js';
 import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
@@ -64,6 +64,7 @@ const state = {
     listTimer: null,
     collapsed: new Set(JSON.parse(localStorage.getItem('happy.collapsed') || '[]')),
     hostOrder: readHostOrder(localStorage.getItem('happy.hostOrder')), // computers as the person dragged them
+    linkNames: readLinkNames(localStorage.getItem('happy.linkNames')), // url -> custom display name in the links panel
     dragHost: null,          // the computer being dragged; the list holds still meanwhile
     archivedOpen: localStorage.getItem('happy.archivedOpen') === '1', // the 已归档 group; closed by default
     archivedShown: ARCHIVED_PAGE, // how many archived rows the open group lists
@@ -189,6 +190,7 @@ function logout() {
     localStorage.removeItem('happy.secret');
     localStorage.removeItem('happy.token');
     // Decrypted links stay with the account, not on a shared machine.
+    localStorage.removeItem('happy.linkNames');
     for (const key of Object.keys(localStorage)) if (key.startsWith('happy.links.') || key.startsWith('happy.lines.')) localStorage.removeItem(key);
     clearInterval(state.messageTimer);
     clearInterval(state.listTimer);
@@ -196,7 +198,7 @@ function logout() {
     state.linesGen++;
     socket?.disconnect();
     socket = null;
-    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), deletingIds: new Set(), deletingBatch: false });
+    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), linkNames: {}, deletingIds: new Set(), deletingBatch: false });
     $('app').hidden = true;
     $('login').hidden = false;
     desktop.reset();
@@ -1006,10 +1008,55 @@ function startLinkScan(s, thread) {
     }).finally(rerender);
 }
 
+function saveLinkNames() {
+    try {
+        if (Object.keys(state.linkNames).length) localStorage.setItem('happy.linkNames', writeLinkNames(state.linkNames));
+        else localStorage.removeItem('happy.linkNames');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+/** Inline-rename one link in the right-hand panel; blank restores the automatic name. */
+function startLinkRename(row, item) {
+    const head = row.querySelector('.link-head');
+    if (!head || head.querySelector('.link-input')) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'link-input';
+    input.dataset.sessionId = state.current?.id || '';
+    input.maxLength = 120;
+    input.value = linkLabel(item, state.linkNames);
+    input.placeholder = `留空恢复「${item.label}」`;
+    input.setAttribute('aria-label', '修改链接名称');
+    let done = false;
+    const finish = (save) => {
+        if (done) return;
+        done = true;
+        if (save) {
+            state.linkNames = setLinkName(state.linkNames, item.url, input.value, item.label);
+            saveLinkNames();
+        }
+        renderLinks();
+    };
+    input.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    head.replaceChildren(input);
+    input.focus();
+    input.select();
+}
+
 /** The panel for the open chat: hidden while it has no links. */
 function renderLinks() {
     const box = $('links');
     const s = state.current;
+    // Don't tear down an active inline rename in this session while messages arrive in the background.
+    if (box.contains(document.activeElement) && document.activeElement.classList.contains('link-input')
+        && document.activeElement.dataset.sessionId === (s?.id || '')) return;
     const thread = s && state.threads.get(s.id);
     const groups = thread?.links ? thread.links.list() : [];
     const total = groups.reduce((n, g) => n + g.items.length, 0);
@@ -1071,12 +1118,20 @@ function linkRow(item, freshAt, now, loading) {
         row.classList.add('flash');
         row.style.animationDelay = `-${now - freshAt}ms`;
     }
+    const head = el('div', 'link-head');
     const a = el('a', 'link-name');
     a.href = item.url;
     a.target = '_blank';
     a.rel = 'noopener';
     a.title = item.url;
-    a.append(el('span', 'label', item.label), el('span', 'ext', '↗'));
+    a.append(el('span', 'label', linkLabel(item, state.linkNames)), el('span', 'ext', '↗'));
+    const edit = el('button', 'link-edit');
+    edit.type = 'button';
+    edit.title = '重命名';
+    edit.setAttribute('aria-label', '重命名');
+    edit.innerHTML = iconSvg('edit', 13);
+    edit.onclick = (e) => { e.stopPropagation(); startLinkRename(row, item); };
+    head.append(a, edit);
     const src = el('button', 'link-src');
     src.type = 'button';
     src.dataset.seq = String(item.seq);
@@ -1084,7 +1139,7 @@ function linkRow(item, freshAt, now, loading) {
     src.textContent = loading ? '正在载入…'
         : [item.who === 'user' ? '你' : 'agent', item.at ? messageTime(item.at) : null, item.count > 1 ? `提到 ${item.count} 次` : null]
             .filter(Boolean).join(' · ');
-    row.append(a, src);
+    row.append(head, src);
     return row;
 }
 
