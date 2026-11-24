@@ -94,4 +94,15 @@ test('formatTokens', () => {
     assert.equal(formatTokens(48200000), '4,820 万');
     assert.equal(formatTokens(1240000000), '12.4 亿');
     assert.equal(formatTokens(100000000), '1 亿');
+    assert.equal(formatTokens(99999600), '1 亿');
+    assert.equal(formatTokens(999999), '100 万');
+    assert.equal(formatTokens(9999), '9,999');
+    assert.equal(formatTokens(10000), '1 万');
+});
+
+test('summarize: all-zero days give no best; missing parts do not make NaN', () => {
+    const z = summarize([{ agent: 'a', days: { '2026-11-01': [0, 0, 0, 0] } }], today);
+    assert.equal(z.best, null);
+    const m = summarize([{ agent: 'a', days: { '2026-11-01': [3, 2] } }], today);
+    assert.equal(m.total, 5);
 });

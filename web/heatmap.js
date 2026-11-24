@@ -17,7 +17,7 @@ export function summarize(entries, today) {
                 d = { total: 0, parts: [0, 0, 0, 0], agents: {} };
                 byDay.set(day, d);
             }
-            const sum = parts.reduce((a, b) => a + b, 0);
+            const sum = parts.reduce((a, b) => a + (b || 0), 0);
             for (let i = 0; i < 4; i++) d.parts[i] += parts[i] || 0;
             d.total += sum;
             d.agents[agent] = (d.agents[agent] || 0) + sum;
@@ -30,6 +30,7 @@ export function summarize(entries, today) {
     let best = null;
     for (const [day, d] of byDay) {
         if (day >= from && day <= to) last30 += d.total;
+        if (d.total <= 0) continue;
         if (!best || d.total > best.total || (d.total === best.total && day < best.day)) best = { day, total: d.total };
     }
     return { total, last30, best, byDay };
@@ -83,6 +84,6 @@ export function formatTokens(n) {
     const trim = (x) => String(Number(x.toFixed(1)));
     if (n < 1e4) return n.toLocaleString('en-US');
     if (n < 1e6) return `${trim(n / 1e4)} 万`;
-    if (n < 1e8) return `${Math.round(n / 1e4).toLocaleString('en-US')} 万`;
+    if (Math.round(n / 1e4) < 1e4) return `${Math.round(n / 1e4).toLocaleString('en-US')} 万`;
     return `${trim(n / 1e8)} 亿`;
 }
