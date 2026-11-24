@@ -1,7 +1,7 @@
 {
   "name": "happy-desktop",
   "productName": "Happy",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Happy web-mini as a macOS app",
   "main": "main.js",
   "private": true,
