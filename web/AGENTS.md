@@ -31,10 +31,10 @@
 
 - `localStorage` 的键都以 `happy.` 开头。现有的键有：`happy.server`、`happy.token`、`happy.secret`、`happy.seen`、
   `happy.collapsed`、`happy.hostOrder`（电脑的顺序，`{ v: 1, keys: [machineKey…] }`）、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
-  `happy.linksHidden`、`happy.linkNames`（右栏链接自定义名称，`{ v: 1, names: { url: label } }`，退出登录时清除）、`happy.links.<会话 id>`、`happy.lines.<会话 id>`，以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
+  `happy.linksHidden`、`happy.linkNames`（右栏链接自定义名称，`{ v: 1, names: { url: label } }`，退出登录时清除）、`happy.links.<会话 id>`、`happy.lines.<会话 id>`、`happy.usage.<会话 id>`（用量页的 token 统计），以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
   `happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
   `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
-- 已读：正在看的会话，标签页可见、不在设置页、并且窗口有焦点（`document.hasFocus()`）才算看过（`viewing()`），网页和 Mac 应用一样；
+- 已读：正在看的会话，标签页可见、不在设置页或用量页（`coveredByPage()`）、并且窗口有焦点（`document.hasFocus()`）才算看过（`viewing()`），网页和 Mac 应用一样；
   窗口重新拿到焦点（`focus`）时补标已读。
 - **从会话里解密出来的内容**（链接、文件路径之类）按会话缓存时，退出登录要清掉：加到 `logout()` 里按前缀删除的那一行。
 - 读缓存要容错：用 `try/catch` 包住 `JSON.parse`，带上版本号 `v`，格式不对就当作没有缓存，重新算。
@@ -65,6 +65,7 @@
   只对已归档的普通会话开放，Bot / 任务不提供删除（对照 iOS `SessionInfoModel.keepsConversation`、Android `SessionOps.delete`）。
   本标签页发起删除时把会话 id 放进 `state.deletingIds`，忽略服务端回推的 `delete-session` 避免和本地收尾冲突；
   删除后清理内存状态和该会话在 `localStorage` 里的键（`happy.links.*` / `happy.lines.*` / `happy.model.*` / `happy.effort.*` / `happy.permission.*` / `seen` / `bgDismissed`）。
+  `happy.usage.*` 故意不删：删掉的会话继续计入用量，只在退出登录时清掉。
   残留 worktree 的检查按 `(machineId, repo)` 分组调用一次 `listWorktrees`，避免批量删除时重复发 RPC，且只删没有被其余未删会话继续引用的 worktree。
 
 ### 消息格式
@@ -140,12 +141,25 @@
 - agent 常用文件路径当链接目标。`markdown.js` 在 DOMPurify 的钩子里用 `links.js` 的 `localPath()` 认出这类链接（没有 scheme 的相对 / 绝对路径、`file:`），
   去掉 href，改成 `.path-link` + `data-path`；`app.js` 里点击或回车就复制路径。`#L12` 转成 `:12`。
 
-### 扫历史的两套缓存
+### 扫历史的三套缓存
 
 - 右栏链接（`links.js`）：打开会话后扫一遍历史，缓存在 `happy.links.<id>`，记录已覆盖的 seq 区间，下次只补新的。
 - 改动行数（`lines.js`）：后台一次一个会话地同步所有在线会话加上正在看的那个（`wantLines` / `runLines`）。
   先用 `after_seq` 补新消息，再用 `before_seq` 往前扫到头；有刚打开的会话在排队时，往前扫的会话每翻一页就让一次。
   推送来的消息 seq 正好接上就直接累加，接不上就排队同步。失败后一分钟内不重试。缓存在 `happy.lines.<id>`。
+- Token 用量（`tokens.js` 读 usage、`heatmap.js` 汇总和分档，`app.js` 的 `// ---------- Token usage` 段）：只在用量页开着时同步
+  （`in-usage`；页面关掉后当前这一页拉完就停），`state.sessions` 里所有会话（含已归档、侧聊）一次一个，同样走 `syncLines`，每页 500 条，
+  最近活跃的先同步；`syncSessions` 结束和收到推送时补新消息，推送不直接累加。失败后一分钟内不重试。缓存在 `happy.usage.<id>`：
+  `{ v: 1, agent, from, to, complete, days, edge }`，`days` 是本地日期 → `[输入, 输出, 写缓存, 读缓存]`，`agent` 是 `agentFlavor(meta)`。
+  - 哪些算：session 协议里 `role: 'agent'` 且带 `usage` 的信封（subagent 的也算；Codex 的 usage 单独放在一个空文本的 `service` 信封里，没有 turn），
+    旧格式 Claude `output` 里 `assistant` 消息的 `message.usage`。按消息的 `createdAt`（server 时间）的本地日期归天，没有时退回信封里的时间。
+    对照 happy-wire `sessionProtocol.ts`（`usage`）、happy-cli `claude/utils/sessionProtocolMapper.ts`（`attachUsageToLastEnvelope`）、
+    `codex/utils/sessionProtocolMapper.ts`（`token_count`）。
+  - 去重：Claude 一次回复按 content block 拆成几条消息，每条都带同一份 usage。旧格式按 `message.id` 去重；
+    session 信封里没有 message id，用 `turn | subagent | 四个数` 当键。本次同步见过的键记在内存里；另外把 seq 最小和最大的那条的键存进缓存（`edge`），
+    下次往前或往后接页时，跨在边界上的重复也挡得住。
+  - 汇总读 `localStorage` 里所有 `happy.usage.*`（本次加载过的会话用内存里的），所以 server 上已删的会话照样计入；删除会话不清这个键，退出登录清掉。
+  - 渲染 250ms 节流；热力图每次重画都保持横向滚动位置，只有刚打开时滚到最右（最近一周）。
 
 ## Mac 应用里才有的界面
 

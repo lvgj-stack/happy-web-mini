@@ -25,7 +25,7 @@ import { addBreak, isBreak, isCut, segmentFor } from './turns.js';
 import { launchedSubagents, stepsText, subagentStore } from './subagents.js';
 import { resumeAvailability, resumeDirectoryGone, resumeFailure, resumeFallback } from './resume.js';
 import { forkAvailability, forkCopyRequest, forkSpawnParams } from './fork.js';
-import { messageTime } from './time.js';
+import { localDay, messageTime } from './time.js';
 import { onServerScheme } from './serverUrl.js';
 import { onFirstLine, onLastLine, promptHistory, stepHistory } from './history.js';
 import { createWorktree, listWorktrees, readWorktreeDefault, removeWorktree, repoOf, restoreWorktree, setWorktreeDefault, worktreeNameError, worktreeOf, worktreeSelection } from './worktree.js';
@@ -34,6 +34,8 @@ import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
 import { linkLabel, linkTracker, readLinkNames, scanHistory, setLinkName, writeLinkNames } from './links.js';
 import { compactCount, lineStats, syncLines } from './lines.js';
+import { tokenStats } from './tokens.js';
+import { formatTokens, heatmapWeeks, summarize } from './heatmap.js';
 import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
@@ -87,6 +89,15 @@ const state = {
     linesGen: 0,             // bumped on logout: a run still going stops
     linesFirst: null,        // the session just opened: the others step aside for it
     linesRender: null,
+    usage: new Map(),        // session id -> token usage, see usageOf; kept after the session is deleted
+    usageQueue: [],          // sessions waiting for their usage to catch up, one at a time, while the 用量 page is open
+    usageRunning: false,
+    usageGen: 0,             // bumped on logout: a run still going stops
+    usageRender: null,
+    usageDay: null,          // the day picked on the 用量 page; null: today
+    usageHover: null,        // the day under the pointer or keyboard focus, shown instead of the picked one
+    usageSummary: null,      // what the page shows now (heatmap.js summarize)
+    usageStick: false,       // the heatmap scrolls to the newest week at the next render
     deletingIds: new Set(),  // session ids being deleted by this tab, so our own delete-session push is ignored
     deletingBatch: false,
 };
@@ -191,14 +202,17 @@ function logout() {
     localStorage.removeItem('happy.token');
     // Decrypted links stay with the account, not on a shared machine.
     localStorage.removeItem('happy.linkNames');
-    for (const key of Object.keys(localStorage)) if (key.startsWith('happy.links.') || key.startsWith('happy.lines.')) localStorage.removeItem(key);
+    for (const key of Object.keys(localStorage)) if (key.startsWith('happy.links.') || key.startsWith('happy.lines.') || key.startsWith(USAGE_PREFIX)) localStorage.removeItem(key);
     clearInterval(state.messageTimer);
     clearInterval(state.listTimer);
     clearTimeout(state.linesRender);
+    clearTimeout(state.usageRender);
     state.linesGen++;
+    state.usageGen++;
+    document.body.classList.remove('in-usage');
     socket?.disconnect();
     socket = null;
-    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), linkNames: {}, deletingIds: new Set(), deletingBatch: false });
+    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, usage: new Map(), usageQueue: [], usageRunning: false, usageRender: null, usageDay: null, usageHover: null, usageSummary: null, usageStick: false, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), linkNames: {}, deletingIds: new Set(), deletingBatch: false });
     $('app').hidden = true;
     $('login').hidden = false;
     desktop.reset();
@@ -254,6 +268,7 @@ async function syncSessions() {
     renderAsk();
     renderUsage();
     if (document.body.classList.contains('in-settings')) renderSettings();
+    if (usagePageOpen()) queueAllUsage();
 }
 
 const isArchived = (s) => s.meta.lifecycleState === 'archived';
@@ -483,10 +498,15 @@ function sessionChanged(s) {
     s.settleTimer = setTimeout(() => renderList(), UNREAD_SETTLE + 50);
 }
 
+/** The settings or 用量 page is over the chat. */
+function coveredByPage() {
+    return document.body.classList.contains('in-settings') || document.body.classList.contains('in-usage');
+}
+
 /** The person is looking at this session right now. */
 function viewing(s) {
     // A window can be visible behind other apps (browser or Mac app): only one in front counts as looked at.
-    return s === state.current && document.visibilityState === 'visible' && !document.body.classList.contains('in-settings')
+    return s === state.current && document.visibilityState === 'visible' && !coveredByPage()
         && document.hasFocus();
 }
 
@@ -855,9 +875,9 @@ async function runLines() {
     }
 }
 
-/** Decrypt a page of raw messages, in seq order. */
-async function linesRows(s, messages) {
-    return Promise.all(messages.map(async (m) => ({ seq: m.seq, raw: await decryptMessage(s, m) })));
+/** Decrypt a page of raw messages, in seq order: [{ seq, raw, createdAt }] (createdAt: server time, ms). */
+async function messageRows(s, messages) {
+    return Promise.all(messages.map(async (m) => ({ seq: m.seq, raw: await decryptMessage(s, m), createdAt: m.createdAt })));
 }
 
 async function syncSessionLines(s) {
@@ -873,11 +893,11 @@ async function syncSessionLines(s) {
             target: () => s.seq ?? 0,
             fetchOlder: async (before) => {
                 const page = await api('GET', url(`before_seq=${before}&limit=${LINES_PAGE}`));
-                return { rows: await linesRows(s, page.messages.slice().reverse()), hasMore: page.hasMore }; // DESC -> ASC
+                return { rows: await messageRows(s, page.messages.slice().reverse()), hasMore: page.hasMore }; // DESC -> ASC
             },
             fetchNewer: async (after) => {
                 const page = await api('GET', url(`after_seq=${after}&limit=${LINES_PAGE}`));
-                return { rows: await linesRows(s, page.messages), hasMore: page.hasMore };
+                return { rows: await messageRows(s, page.messages), hasMore: page.hasMore };
             },
             save: (cover) => {
                 if (!alive()) return;
@@ -941,6 +961,280 @@ function linesNode(s) {
         + (cover?.complete ? '' : '（更早的消息还在统计）')
         + '\n按改文件的工具调用统计，在命令行里改的不算';
     return node;
+}
+
+// ---------- Token usage: the 用量 page (see tokens.js, heatmap.js) ----------
+// Every session's history, one session at a time, only while the page is open:
+// the same newer-then-older walk as the line counts (syncLines), cached per
+// session in happy.usage.<id>. The totals read every cached session, so a
+// session deleted from the server keeps counting; logout clears them all.
+
+const USAGE_RETRY_MS = 60_000;
+const USAGE_PAGE = 500; // the server's limit
+const USAGE_PREFIX = 'happy.usage.';
+const WEEKDAYS = '日一二三四五六';
+
+/** The 用量 page is showing. */
+function usagePageOpen() {
+    return document.body.classList.contains('in-usage');
+}
+
+/** What this browser saved for a session: { v, agent, from, to, complete, ... }, or null. */
+function readUsageCache(id) {
+    try {
+        const c = JSON.parse(localStorage.getItem(USAGE_PREFIX + id) || 'null');
+        return c?.v === 1 && Number.isFinite(c.from) && Number.isFinite(c.to) ? c : null;
+    } catch {
+        return null; // unreadable: count again
+    }
+}
+
+/** A session's usage: { stats, cover, agent, busy, dirty, failedAt }, read from this browser on first use. */
+function usageOf(s) {
+    let u = state.usage.get(s.id);
+    if (u) return u;
+    const cached = readUsageCache(s.id);
+    u = {
+        stats: tokenStats(cached),
+        cover: cached && { from: cached.from, to: cached.to, complete: !!cached.complete }, // the seqs counted (see syncLines)
+        agent: agentFlavor(s.meta),
+        busy: false,  // a sync is running
+        dirty: false, // a message came in during it
+        failedAt: 0,
+    };
+    state.usage.set(s.id, u);
+    return u;
+}
+
+function saveUsage(s, u) {
+    if (!u.cover) return;
+    try {
+        localStorage.setItem(USAGE_PREFIX + s.id, JSON.stringify({ v: 1, agent: u.agent, ...u.cover, ...u.stats.toJSON() }));
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+/** Counted up to the session's newest message, back to its first. */
+function usageDone(s) {
+    const { cover } = usageOf(s);
+    return !!cover?.complete && cover.to >= (s.seq ?? 0);
+}
+
+function needsUsage(s) {
+    const u = usageOf(s);
+    if (u.busy || Date.now() - u.failedAt < USAGE_RETRY_MS) return false;
+    return !usageDone(s);
+}
+
+/** Line up one session, while the page is open. */
+function wantUsage(s) {
+    if (!usagePageOpen()) return;
+    if (!state.usageQueue.includes(s) && needsUsage(s)) state.usageQueue.push(s);
+    runUsage();
+}
+
+/** Every session that is behind, the most recently active first (their days fill in first). */
+function queueAllUsage() {
+    const sessions = [...state.sessions.values()].sort((a, b) => (b.activeAt ?? 0) - (a.activeAt ?? 0));
+    for (const s of sessions) wantUsage(s);
+    usageChanged();
+}
+
+async function runUsage() {
+    if (state.usageRunning) return;
+    state.usageRunning = true;
+    const gen = state.usageGen;
+    try {
+        while (state.usageGen === gen && usagePageOpen() && state.usageQueue.length) {
+            const s = state.usageQueue.shift();
+            if (state.sessions.get(s.id) === s && needsUsage(s)) await syncSessionUsage(s); // deleted meanwhile: skip
+        }
+    } finally {
+        if (state.usageGen === gen) {
+            state.usageRunning = false;
+            usageChanged();
+        }
+    }
+}
+
+async function syncSessionUsage(s) {
+    const u = usageOf(s);
+    // Gone on logout; closing the page stops it after the page in flight (what came before is saved).
+    const alive = () => state.usage.get(s.id) === u && usagePageOpen();
+    const url = (q) => `/v3/sessions/${encodeURIComponent(s.id)}/messages?${q}`;
+    u.busy = true;
+    u.dirty = false;
+    try {
+        await syncLines({
+            stats: u.stats,
+            cover: u.cover,
+            target: () => s.seq ?? 0,
+            fetchOlder: async (before) => {
+                const page = await api('GET', url(`before_seq=${before}&limit=${USAGE_PAGE}`));
+                return { rows: await messageRows(s, page.messages.slice().reverse()), hasMore: page.hasMore }; // DESC -> ASC
+            },
+            fetchNewer: async (after) => {
+                const page = await api('GET', url(`after_seq=${after}&limit=${USAGE_PAGE}`));
+                return { rows: await messageRows(s, page.messages), hasMore: page.hasMore };
+            },
+            save: (cover) => {
+                if (!alive()) return;
+                u.cover = cover;
+                saveUsage(s, u);
+                usageChanged();
+            },
+            alive,
+        });
+    } catch (e) {
+        console.error(e);
+        u.failedAt = Date.now(); // the next list sync after a minute tries again
+    } finally {
+        u.busy = false;
+    }
+    if (u.dirty && state.usage.get(s.id) === u) wantUsage(s); // what came in while it ran
+}
+
+/** A pushed message while the page is open: fetched with the rest of its session's new messages. */
+function pushUsage(s) {
+    const u = usageOf(s);
+    if (u.busy) u.dirty = true;
+    else wantUsage(s);
+}
+
+/** Redraw the page, at most a few times a second. */
+function usageChanged() {
+    if (state.usageRender || !usagePageOpen()) return;
+    state.usageRender = setTimeout(() => {
+        state.usageRender = null;
+        if (usagePageOpen()) renderUsagePage();
+    }, 250);
+}
+
+/** Every session counted in this browser: the ones loaded this run from memory, deleted ones from their cache. */
+function usageEntries() {
+    const entries = new Map();
+    for (const key of Object.keys(localStorage)) {
+        if (!key.startsWith(USAGE_PREFIX)) continue;
+        const id = key.slice(USAGE_PREFIX.length);
+        if (state.usage.has(id)) continue;
+        const c = readUsageCache(id);
+        if (c) entries.set(id, { agent: typeof c.agent === 'string' ? c.agent : 'claude', days: tokenStats(c).days });
+    }
+    for (const [id, u] of state.usage) if (u.cover) entries.set(id, { agent: u.agent, days: u.stats.days });
+    return entries;
+}
+
+/** "11 月 3 日 周一" for "2026-11-03". */
+function usageDayName(day) {
+    const [y, m, d] = day.split('-').map(Number);
+    return `${m} 月 ${d} 日 周${WEEKDAYS[new Date(y, m - 1, d).getDay()]}`;
+}
+
+function openUsage() {
+    document.body.classList.remove('in-settings');
+    document.body.classList.add('in-usage', 'in-chat');
+    state.usageStick = true;
+    state.usageHover = null;
+    renderUsagePage();
+    queueAllUsage();
+}
+
+function closeUsage() {
+    document.body.classList.remove('in-usage');
+    if (!state.current) document.body.classList.remove('in-chat');
+    markRead(state.current);
+}
+
+/** The totals, the heatmap, the picked day's detail and how far the sync got. */
+function renderUsagePage() {
+    const entries = usageEntries();
+    const today = new Date();
+    const sum = summarize([...entries.values()], today);
+    state.usageSummary = sum;
+
+    const sessions = [...state.sessions.values()];
+    const syncing = state.usageRunning || state.usageQueue.length > 0;
+    const behind = sessions.filter((s) => !usageDone(s)).length;
+    $('usage-progress').textContent = syncing
+        ? `统计中 ${sessions.length - behind} / ${sessions.length} 个会话…`
+        : `已统计 ${entries.size} 个会话` + (behind ? `，${behind} 个没统计完，稍后重试` : '');
+
+    const stat = (label, value, when) => {
+        const node = el('div', 'usage-stat');
+        const line = el('div', 'value', value);
+        if (when) line.append(el('span', 'when', when));
+        node.append(el('span', 'label', label), line);
+        return node;
+    };
+    $('usage-stats').replaceChildren(
+        stat('累计', formatTokens(sum.total)),
+        stat('最近 30 天', formatTokens(sum.last30)),
+        stat('最多的一天', sum.best ? formatTokens(sum.best.total) : '—', sum.best ? sum.best.day.slice(5) : ''),
+    );
+
+    const box = $('usage-heatmap');
+    const scrollLeft = box.scrollLeft;
+    const focused = document.activeElement?.closest?.('#usage-heatmap') ? document.activeElement.dataset.day : null;
+    const picked = state.usageDay ?? localDay(today.getTime());
+    const grid = el('div', 'usage-grid');
+    const weeks = heatmapWeeks(sum.byDay, today);
+    weeks.forEach((week, i) => {
+        // The first column's month is there to name the start; drop it when the next label would sit on top of it.
+        const crowded = i === 0 && weeks.slice(1, 4).some((w) => w.month);
+        grid.append(el('span', 'usage-month', crowded ? null : week.month));
+        for (const d of week.days) {
+            if (!d) { grid.append(el('span', 'usage-blank')); continue; }
+            const cell = el('button', 'usage-cell');
+            cell.type = 'button';
+            cell.dataset.day = d.day;
+            cell.dataset.level = String(d.level);
+            cell.title = `${usageDayName(d.day)} · ${formatTokens(d.total)}`;
+            cell.setAttribute('aria-label', cell.title);
+            if (d.day === picked) cell.classList.add('selected');
+            grid.append(cell);
+        }
+    });
+    box.replaceChildren(grid);
+    if (state.usageStick) { box.scrollLeft = box.scrollWidth; state.usageStick = false; } // the newest week in view
+    else box.scrollLeft = scrollLeft;
+    if (focused) box.querySelector(`[data-day="${focused}"]`)?.focus({ preventScroll: true });
+    renderUsageDay(state.usageHover ?? picked);
+}
+
+/** 用量 › one day: the total, its four parts and each agent's share. */
+function renderUsageDay(day) {
+    const d = state.usageSummary?.byDay.get(day);
+    const head = el('div', 'head');
+    head.append(el('span', 'date', usageDayName(day)), el('span', 'total', d?.total ? formatTokens(d.total) : '没有用量'));
+    const box = $('usage-day');
+    box.replaceChildren(head);
+    if (!d?.total) return;
+    const [input, output, cacheWrite, cacheRead] = d.parts;
+    box.append(el('div', 'parts', `读缓存 ${formatTokens(cacheRead)} · 写缓存 ${formatTokens(cacheWrite)} · 输入 ${formatTokens(input)} · 输出 ${formatTokens(output)}`));
+    const agents = Object.entries(d.agents).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+    if (agents.length) box.append(el('div', 'agents', agents.map(([a, n]) => `${AGENT_NAMES[a] ?? a} ${formatTokens(n)}`).join(' · ')));
+}
+
+/** Pointing at a day shows it; clicking (or Enter) picks it, and leaving the map goes back to the picked one. */
+function bindUsageHeatmap() {
+    const box = $('usage-heatmap');
+    const dayOf = (e) => e.target.closest?.('.usage-cell[data-day]')?.dataset.day;
+    const show = (day) => { state.usageHover = day; renderUsageDay(day); };
+    box.addEventListener('mouseover', (e) => { const day = dayOf(e); if (day) show(day); });
+    box.addEventListener('focusin', (e) => { const day = dayOf(e); if (day) show(day); });
+    box.addEventListener('mouseleave', () => {
+        state.usageHover = null;
+        renderUsageDay(state.usageDay ?? localDay(Date.now()));
+    });
+    box.addEventListener('click', (e) => {
+        const day = dayOf(e);
+        if (!day) return;
+        state.usageDay = day;
+        for (const cell of box.querySelectorAll('.usage-cell.selected')) cell.classList.remove('selected');
+        e.target.closest('.usage-cell').classList.add('selected');
+        renderUsageDay(day);
+    });
 }
 
 // ---------- Links: the side panel (see links.js) ----------
@@ -1345,7 +1639,7 @@ async function forkSession(s) {
         if (r?.type !== 'success' || !r.sessionId) throw new Error('电脑返回了无法识别的结果');
         const forked = await waitForSession(r.sessionId);
         notice(forked ? '' : 'fork 出来的会话已经启动，稍后会出现在列表里。');
-        if (forked && !document.body.classList.contains('in-settings')) openSession(forked);
+        if (forked && !coveredByPage()) openSession(forked);
     } catch (e) {
         notice(`fork 失败：${/webhook timeout/i.test(e.message) ? '电脑上的 happy 15 秒内没有启动好，再试一次' : e.message}`);
     } finally {
@@ -1380,7 +1674,7 @@ async function openSession(s) {
     }
     state.current = s;
     closeLinksPopover();
-    document.body.classList.remove('in-settings');
+    document.body.classList.remove('in-settings', 'in-usage');
     document.body.classList.add('in-chat');
     markSelected();
     if (previous !== s) {
@@ -3029,6 +3323,7 @@ async function pickWallpaperFile(file) {
 }
 
 function openSettings() {
+    document.body.classList.remove('in-usage');
     document.body.classList.add('in-settings', 'in-chat');
     renderSettings();
     refreshCodexModels(settingsCodexSession());
@@ -3208,6 +3503,7 @@ async function onUpdate(body) {
         const counted = linesTracked(s);
         const raw = counted || state.threads.has(s.id) ? await decryptMessage(s, body.message) : null;
         if (counted) pushLines(s, body.message, raw);
+        if (usagePageOpen()) pushUsage(s);
         await acceptMessage(s, body.message, raw);
         if (viewing(s)) markRead(s); else renderList();
         return;
@@ -3377,7 +3673,7 @@ async function archiveSession(s) {
     }
     // Only if the person is still on it; they may have moved on while it was archiving.
     const next = neighbours.find((n) => n !== s && isOnline(n) && n.meta.isSideChat !== true);
-    if (archived && state.current === s && next && !document.body.classList.contains('in-settings')) openSession(next);
+    if (archived && state.current === s && next && !coveredByPage()) openSession(next);
     if (archived && dropWorktree) await dropArchivedWorktree(s, worktree);
 }
 
@@ -3518,7 +3814,7 @@ function forgetSessions(ids, { preferArchived = false } = {}) {
         const next = preferArchived
             ? archivedNeighbours.find((n) => state.sessions.has(n.id)) ?? liveSessions()[0] ?? null
             : liveSessions()[0] ?? archivedSessions()[0] ?? null;
-        if (next && !document.body.classList.contains('in-settings')) openSession(next);
+        if (next && !coveredByPage()) openSession(next);
         else clearCurrentSession();
     }
     renderList();
@@ -3866,7 +4162,7 @@ function sessionMenu(s) {
     const special = !!(s.meta.bot || s.meta.task); // bots and tasks have no project to start in
     const projectPath = place(s).projectPath || s.meta.path;
     return [
-        { label: '打开', action: () => openSession(s), hidden: s === state.current && !document.body.classList.contains('in-settings') },
+        { label: '打开', action: () => openSession(s), hidden: s === state.current && !coveredByPage() },
         { label: '标为已读', icon: 'copied', hidden: !hasUnseen(s), action: () => markSeen([s]) },
         { label: '标为未读', icon: 'unread', hidden: archived || hasUnseen(s) || s === state.current || !(s.seq > 0), action: () => markUnread(s) },
         '-',
@@ -4232,7 +4528,7 @@ async function showApp() {
 
 /** On arrival, go straight to the first unread session in list order, else the first one. */
 function openFirstSession() {
-    if (state.current || document.body.classList.contains('in-settings')) return;
+    if (state.current || coveredByPage()) return;
     const sessions = liveSessions();
     const s = sessions.find(hasUnseen) ?? sessions[0]; // on arrival: whether it still works is not known yet
     if (s) openSession(s);
@@ -4336,6 +4632,8 @@ setButton($('new-open'), 'newChat', '');
 setButton($('logout'), 'logout', '退出登录');
 setButton($('settings-open'), 'settings', '');
 setButton($('settings-back'), 'back', '返回');
+setButton($('usage-open'), 'usage', '');
+setButton($('usage-back'), 'back', '返回');
 $('subagent-close').innerHTML = iconSvg('close');
 $('subagent-icon').innerHTML = iconSvg('agent');
 setButton($('back'), 'back', '返回');
@@ -4352,6 +4650,9 @@ $('login-qr').onclick = loginWithQR;
 $('logout').onclick = () => { closeSettings(); logout(); };
 $('settings-open').onclick = openSettings;
 $('settings-back').onclick = closeSettings;
+$('usage-open').onclick = openUsage;
+$('usage-back').onclick = closeUsage;
+bindUsageHeatmap();
 $('brand-input').addEventListener('input', () => {
     const name = $('brand-input').value.trim();
     if (name) localStorage.setItem('happy.brand', name); else localStorage.removeItem('happy.brand');

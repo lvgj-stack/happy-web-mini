@@ -86,17 +86,45 @@
   .icon-btn { width: 34px; height: 34px; justify-content: center; border-radius: 8px; color: var(--muted); }
   .icon-btn svg { width: 18px; height: 18px; }
   .icon-btn:hover { background: rgba(38, 42, 39, .06); color: var(--ink); }
-  body.in-settings #settings-open { background: var(--moss-tint); color: var(--ink); }
+  body.in-settings #settings-open, body.in-usage #usage-open { background: var(--moss-tint); color: var(--ink); }
 
-  /* Settings page: takes the main area in place of the chat */
-  #settings-page { display: none; padding-top: 28px; padding-bottom: 48px; overflow-y: auto; }
-  body.in-settings #settings-page { display: block; }
+  /* Settings and 用量 pages: take the main area in place of the chat */
+  #settings-page, #usage-page { display: none; padding-top: 28px; padding-bottom: 48px; overflow-y: auto; }
+  body.in-settings #settings-page, body.in-usage #usage-page { display: block; }
   body.in-settings main > :not(#settings-page):not(#side-expand) { display: none !important; }
+  body.in-usage main > :not(#usage-page):not(#side-expand) { display: none !important; }
   .settings-head { display: flex; align-items: baseline; gap: 14px; }
   .settings-head h2 { font: 400 22px/1.4 var(--serif); margin: 0; }
-  #settings-back { display: none; }
+  #settings-back, #usage-back { display: none; }
   #settings-page h3 { font-size: 16px; font-weight: 600; margin: 28px 0 4px; }
-  #settings-page .hint { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  #settings-page .hint, #usage-page .hint { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  /* 用量: three totals, then a year of days, one square each (weeks across, Monday on top) */
+  #usage-page { --cell: 11px; --gap: 3px; }
+  #usage-stats { display: flex; flex-wrap: wrap; gap: 12px 44px; margin: 22px 0 24px; }
+  .usage-stat .label { display: block; color: var(--muted); font-size: 13px; }
+  .usage-stat .value { font: 400 26px/1.3 var(--serif); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .usage-stat .when { margin-left: 8px; color: var(--muted); font-size: 14px; }
+  .usage-map { display: flex; gap: 6px; }
+  .usage-weekdays { flex: none; display: grid; grid-template-rows: 16px repeat(7, var(--cell)); row-gap: var(--gap); font-size: 10px; line-height: var(--cell); color: var(--muted); }
+  #usage-heatmap { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px; }
+  .usage-grid { display: grid; grid-template-rows: 16px repeat(7, var(--cell)); grid-auto-flow: column; grid-auto-columns: var(--cell); gap: var(--gap); width: max-content; }
+  .usage-month { font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; }
+  .usage-cell { display: block; width: var(--cell); height: var(--cell); padding: 0; border-radius: 2px; background: var(--rule); }
+  .usage-cell[data-level="1"] { background: color-mix(in srgb, var(--moss) 30%, var(--rule)); }
+  .usage-cell[data-level="2"] { background: color-mix(in srgb, var(--moss) 55%, var(--rule)); }
+  .usage-cell[data-level="3"] { background: color-mix(in srgb, var(--moss) 80%, var(--rule)); }
+  .usage-cell[data-level="4"] { background: var(--moss); }
+  button.usage-cell:hover { box-shadow: 0 0 0 1px var(--muted); }
+  button.usage-cell.selected { box-shadow: 0 0 0 1.5px var(--ink); }
+  .usage-legend { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin: 4px 0 18px; color: var(--muted); font-size: 12px; }
+  .usage-legend .usage-cell { flex: none; }
+  .usage-legend span:first-child { margin-right: 3px; }
+  .usage-legend span:last-child { margin-left: 3px; }
+  #usage-day { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 12px 0; margin-bottom: 14px; font-size: 14px; color: var(--muted); }
+  #usage-day .head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; color: var(--ink); }
+  #usage-day .date { font-weight: 600; }
+  #usage-day .total { font: 400 20px/1.4 var(--serif); font-variant-numeric: tabular-nums; }
+  #usage-day .parts, #usage-day .agents { margin-top: 2px; font-variant-numeric: tabular-nums; }
   .about-version { font: 14px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace; margin: 8px 0 4px; user-select: text; }
   .default-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--rule); }
   .default-row:last-child { border-bottom: 1px solid var(--rule); }
@@ -266,7 +294,7 @@
   #side-expand[hidden] { display: none; }
   body.side-collapsed aside, body.side-collapsed #resizer { display: none; }
   /* keep the chat title clear of the expand button when the column reaches the left edge */
-  body.side-collapsed #chat-head, body.side-collapsed #settings-page { padding-left: max(32px, calc(58px - (100vw - 860px) / 2)); }
+  body.side-collapsed #chat-head, body.side-collapsed #settings-page, body.side-collapsed #usage-page { padding-left: max(32px, calc(58px - (100vw - 860px) / 2)); }
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; font-size: 17px; }
   .column { width: 100%; max-width: 860px; margin: 0 auto; padding: 0 32px; }
   #chat-head { padding-top: 28px; padding-bottom: 16px; display: flex; gap: 16px; align-items: flex-start; }
@@ -287,8 +315,8 @@
   #links.open:not([hidden]) { display: block; position: absolute; z-index: 20; width: min(320px, calc(100% - 16px)); max-height: 60vh; overflow: hidden auto; padding: 8px 6px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(38, 42, 39, .12); }
   /* With the panel docked (from 1168px: 860 + 308), the column is centred in the room left of it: the panel is 260px wide, 24px from the edge. */
   @container (min-width: 1168px) {
-    body:not(.links-hidden):not(.in-settings) main:has(> #links:not([hidden])) .column { --col-left: max(0px, (100cqw - 284px - 860px) / 2); margin-left: var(--col-left); margin-right: auto; }
-    body.side-collapsed:not(.links-hidden):not(.in-settings) main:has(> #links:not([hidden])) #chat-head { padding-left: max(32px, calc(58px - var(--col-left))); }
+    body:not(.links-hidden):not(.in-settings):not(.in-usage) main:has(> #links:not([hidden])) .column { --col-left: max(0px, (100cqw - 284px - 860px) / 2); margin-left: var(--col-left); margin-right: auto; }
+    body.side-collapsed:not(.links-hidden):not(.in-settings):not(.in-usage) main:has(> #links:not([hidden])) #chat-head { padding-left: max(32px, calc(58px - var(--col-left))); }
     body:not(.links-hidden) #links:not([hidden]) { display: block; position: absolute; top: 28px; right: 24px; width: 260px; max-height: calc(100% - 52px); overflow: hidden auto; padding: 0; background: none; border: 0; box-shadow: none; }
     body.desktop-mac:not(.links-hidden) #links:not([hidden]) { top: 44px; }
     body:not(.links-hidden) #links-toggle { display: none; }
@@ -610,12 +638,12 @@
     #side-collapse, #side-expand { display: none !important; }
     body.side-collapsed aside { display: flex; }
     body.in-chat.side-collapsed aside { display: none; }
-    body.side-collapsed #chat-head, body.side-collapsed #settings-page { padding-left: 18px; }
+    body.side-collapsed #chat-head, body.side-collapsed #settings-page, body.side-collapsed #usage-page { padding-left: 18px; }
     main { display: none; }
     body.in-chat aside { display: none; }
     body.in-chat main { display: flex; }
     #back { display: block; }
-    #settings-back { display: inline-flex; }
+    #settings-back, #usage-back { display: inline-flex; }
     .column { padding: 0 18px; }
     #slash { left: 18px; right: 18px; }
   }
@@ -656,13 +684,13 @@
   body.desktop-mac .icon-btn { width: 28px; height: 28px; border-radius: 6px; }
   body.desktop-mac .icon-btn svg { width: 17px; height: 17px; }
   body.desktop-mac .side-head .icon-btn:hover, body.desktop-mac #side-expand:hover { background: var(--glass-hover); }
-  body.desktop-mac.in-settings #settings-open { background: var(--sel); }
+  body.desktop-mac.in-settings #settings-open, body.desktop-mac.in-usage #usage-open { background: var(--sel); }
   body.desktop-mac #side-expand { top: 6px; left: 92px; z-index: 101; }
   body.desktop-mac #list { padding: 6px 10px 12px; }
-  body.desktop-mac #chat-head, body.desktop-mac #settings-page { padding-top: 44px; }
+  body.desktop-mac #chat-head, body.desktop-mac #settings-page, body.desktop-mac #usage-page { padding-top: 44px; }
   /* The expand button lives in the title bar now, so a collapsed sidebar needs no room for it */
-  body.desktop-mac.side-collapsed #chat-head, body.desktop-mac.side-collapsed #settings-page,
-  body.desktop-mac.side-collapsed:not(.links-hidden):not(.in-settings) main:has(> #links:not([hidden])) #chat-head { padding-left: 32px; }
+  body.desktop-mac.side-collapsed #chat-head, body.desktop-mac.side-collapsed #settings-page, body.desktop-mac.side-collapsed #usage-page,
+  body.desktop-mac.side-collapsed:not(.links-hidden):not(.in-settings):not(.in-usage) main:has(> #links:not([hidden])) #chat-head { padding-left: 32px; }
 
   /* Each computer is a card of frosted white on the glass, its name on a tinted strip at the top:
      what is inside the card is on that computer. (Tried Finder-style section headings first; with
@@ -698,7 +726,7 @@
   body.desktop-mac .tree-new:hover { background: var(--glass-hover); }
   body.desktop-mac .row.selected, body.desktop-mac .row.selected.menu-open { background: var(--sel); }
   body.desktop-mac.window-inactive .row.selected { background: var(--sel-inactive); }
-  body.desktop-mac.window-inactive.in-settings #settings-open { background: var(--sel-inactive); }
+  body.desktop-mac.window-inactive.in-settings #settings-open, body.desktop-mac.window-inactive.in-usage #usage-open { background: var(--sel-inactive); }
 
   /* Push buttons: the default one in the accent, the rest white */
   body.desktop-mac .primary { padding: 4px 16px; min-height: 28px; font-size: 13px; line-height: 20px; border-radius: 6px;
@@ -817,6 +845,7 @@
     <header class="side-head">
       <span class="brand" id="brand">Happy</span>
       <button id="new-open" class="icon-btn" aria-label="新建会话" title="新建会话"></button>
+      <button id="usage-open" class="icon-btn" aria-label="用量" title="用量"></button>
       <button id="settings-open" class="icon-btn" aria-label="设置" title="设置"></button>
       <button id="side-collapse" class="icon-btn" aria-label="收起侧栏" title="收起侧栏（Ctrl/⌘ + B）"></button>
     </header>
@@ -908,6 +937,21 @@
       <h3>关于</h3>
       <p id="about-version" class="about-version"></p>
       <p class="hint" id="about-detail"></p>
+    </section>
+    <section class="column" id="usage-page" aria-labelledby="usage-title">
+      <div class="settings-head">
+        <button id="usage-back" class="quiet"></button>
+        <h2 id="usage-title">用量</h2>
+        <span id="usage-progress" class="quiet" role="status"></span>
+      </div>
+      <div id="usage-stats"></div>
+      <div class="usage-map">
+        <div class="usage-weekdays" aria-hidden="true"><span></span><span>一</span><span></span><span>三</span><span></span><span>五</span><span></span><span></span></div>
+        <div id="usage-heatmap" role="group" aria-label="每天的 token 用量"></div>
+      </div>
+      <div class="usage-legend" aria-hidden="true"><span>少</span><i class="usage-cell" data-level="0"></i><i class="usage-cell" data-level="1"></i><i class="usage-cell" data-level="2"></i><i class="usage-cell" data-level="3"></i><i class="usage-cell" data-level="4"></i><span>多</span></div>
+      <div id="usage-day" aria-live="polite"></div>
+      <p class="hint">按每次回复的时间统计 Happy 里所有会话的 token（输入、输出、写缓存、读缓存都算），只保存在这个浏览器里；终端里直接用的不算。</p>
     </section>
   </main>
 </div>
