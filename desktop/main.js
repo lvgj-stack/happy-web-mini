@@ -5,7 +5,7 @@
 // The page is served from app://happy/, a standard secure scheme, so ES
 // modules, crypto.subtle and localStorage behave as they do on https.
 
-const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, nativeTheme, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -119,7 +119,13 @@ function createWindow() {
         title: 'Happy',
         show: false,
         backgroundColor: '#FCFCFA',
-        ...(isMac ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 13 } } : {}),
+        // Mac: the sidebar header shares the title bar with the traffic lights, and the
+        // sidebar is translucent over the desktop (the page leaves it see-through, see
+        // "Mac app" in web/index.html). followWindow: flat while the window is in the background.
+        ...(isMac ? {
+            titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 13 },
+            vibrancy: 'sidebar', visualEffectState: 'followWindow', backgroundColor: '#00000000',
+        } : {}),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -407,6 +413,9 @@ if (!app.requestSingleInstanceLock()) {
     app.on('window-all-closed', () => { if (!isMac) app.quit(); });
     app.on('web-contents-created', (_e, wc) => browserLikeContents(wc));
     app.whenReady().then(() => {
+        // The page has no dark theme yet: keep the app light, or the sidebar's vibrancy
+        // would turn dark under the page's dark text when the Mac is in dark mode.
+        nativeTheme.themeSource = 'light';
         // build.mjs records which commit of the page went in; dev runs have none.
         let info = null;
         try { info = JSON.parse(fs.readFileSync(path.join(__dirname, 'build-info.json'), 'utf8')); } catch { /* dev */ }

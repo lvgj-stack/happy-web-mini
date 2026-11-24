@@ -3899,7 +3899,14 @@ window.addEventListener('focus', () => markRead(state.current));
 
 // ---------- Mac app ----------
 // Menu commands and notification clicks from desktop/ (no-ops in a browser).
-if (desktop.platform === 'darwin') document.body.classList.add('desktop-mac');
+if (desktop.platform === 'darwin') {
+    document.body.classList.add('desktop-mac');
+    // As in Finder: with the window in the background the sidebar selection turns grey.
+    const inactive = () => document.body.classList.toggle('window-inactive', !document.hasFocus());
+    window.addEventListener('focus', inactive);
+    window.addEventListener('blur', inactive);
+    inactive();
+}
 desktop.onCommand((name) => {
     if (name === 'find') openFind();
     else if (name === 'find-selection') openFind(String(window.getSelection() ?? ''));

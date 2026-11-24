@@ -21,6 +21,18 @@ Mac 应用（Electron）的开发规范。仓库级的规范（worktree、提交
 - `build.mjs` — 打包（ES module）
 - `assets/` — 应用图标
 
+## Mac 外观
+
+- 样式都在 `../web/index.html` 的「Mac app (desktop/): native look」一节，全部挂在 `body.desktop-mac` 下，网页版不受影响。
+  页面在 Mac 应用里时 `app.js` 给 body 加 `desktop-mac`，窗口失焦时再加 `window-inactive`（选中行变灰，像 Finder）。
+- 毛玻璃：`main.js` 给窗口设 `vibrancy: 'sidebar'`、`visualEffectState: 'followWindow'`、透明的 `backgroundColor`；
+  页面登录后把 body 背景设成透明，侧栏只盖一层半透明的 `--glass`，聊天区（`main`）自己铺 `--sheet`，所以只有侧栏透出桌面。
+  设了壁纸图片时 `#app` 的背景盖住毛玻璃，和以前一样。
+- `nativeTheme.themeSource = 'light'`：网页还没有深色主题，不锁成浅色的话系统深色模式下毛玻璃会变黑、压在深色文字下面。
+  做了深色主题之后去掉这行。
+- 侧栏顶栏在标题栏里（高 40px，左边留 92px 给红绿灯，`trafficLightPosition` 改了要一起改）；收起侧栏后展开按钮也在这一行。
+- 只有在 Mac 上才看得到真的毛玻璃；Linux（xvfb）下没有 vibrancy，冒烟截图里侧栏后面是窗口底色。
+
 ## 安全边界
 
 - 页面用 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true` 运行，拿不到 Node。
