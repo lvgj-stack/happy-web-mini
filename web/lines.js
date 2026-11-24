@@ -244,13 +244,15 @@ export const LATEST = 2147483647; // before_seq=LATEST: the newest page
  * [from, to] has been fed; `complete` means nothing older is left.
  * `fetchOlder(before)` gives the page just before seq `before` (LATEST: the
  * newest) and `fetchNewer(after)` the one just after, both as
- * { rows: [{ seq, raw }] in seq order, hasMore }. `target()` is the newest
- * seq the session is known to have; `save(cover)` runs after every page.
+ * { rows: [{ seq, raw, createdAt }] in seq order, hasMore }. Each row goes to
+ * `stats.see(row.raw, row)` as it is, so a stats object can use seq and createdAt.
+ * `target()` is the newest seq the session is known to have; `save(cover)` runs
+ * after every page.
  * `pause()` true stops going further back for now (another session comes first).
  * Returns the cover reached; rejects when a page fails (what came before is saved).
  */
 export async function syncLines({ stats, cover, target, fetchOlder, fetchNewer, save, alive = () => true, pause = () => false }) {
-    const feed = (rows) => { for (const r of rows) stats.see(r.raw); };
+    const feed = (rows) => { for (const r of rows) stats.see(r.raw, r); };
     if (!cover) {
         const { rows, hasMore } = await fetchOlder(LATEST);
         if (!alive()) return null;
