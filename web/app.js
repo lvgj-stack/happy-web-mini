@@ -983,7 +983,8 @@ function usagePageOpen() {
 function readUsageCache(id) {
     try {
         const c = JSON.parse(localStorage.getItem(USAGE_PREFIX + id) || 'null');
-        return c?.v === 1 && Number.isFinite(c.from) && Number.isFinite(c.to) ? c : null;
+        const daysOk = c?.days !== null && typeof c?.days === 'object' && !Array.isArray(c.days);
+        return c?.v === 1 && Number.isFinite(c.from) && Number.isFinite(c.to) && daysOk ? c : null;
     } catch {
         return null; // unreadable: count again
     }
@@ -1156,9 +1157,10 @@ function renderUsagePage() {
     const sessions = [...state.sessions.values()];
     const syncing = state.usageRunning || state.usageQueue.length > 0;
     const behind = sessions.filter((s) => !usageDone(s)).length;
-    $('usage-progress').textContent = syncing
+    const progress = syncing
         ? `统计中 ${sessions.length - behind} / ${sessions.length} 个会话…`
         : `已统计 ${entries.size} 个会话` + (behind ? `，${behind} 个没统计完，稍后重试` : '');
+    if ($('usage-progress').textContent !== progress) $('usage-progress').textContent = progress; // role=status: say it only when it moves
 
     const stat = (label, value, when) => {
         const node = el('div', 'usage-stat');
@@ -1173,67 +1175,131 @@ function renderUsagePage() {
         stat('最多的一天', sum.best ? formatTokens(sum.best.total) : '—', sum.best ? sum.best.day.slice(5) : ''),
     );
 
+    renderUsageGrid(heatmapWeeks(sum.byDay, today));
+    renderUsageDay(state.usageHover ?? usagePicked());
+}
+
+/** The picked day: clicked or reached with the arrow keys, else today. */
+const usagePicked = () => state.usageDay ?? localDay(Date.now());
+
+/**
+ * The heatmap. The cells are built once per run of days (again when a day or week begins) and
+ * otherwise updated in place, so a click is not lost to a redraw while the sync runs.
+ */
+function renderUsageGrid(weeks) {
     const box = $('usage-heatmap');
-    const scrollLeft = box.scrollLeft;
-    const focused = document.activeElement?.closest?.('#usage-heatmap') ? document.activeElement.dataset.day : null;
-    const picked = state.usageDay ?? localDay(today.getTime());
-    const grid = el('div', 'usage-grid');
-    const weeks = heatmapWeeks(sum.byDay, today);
+    const days = weeks.flatMap((w) => w.days).filter(Boolean);
+    const key = `${days[0]?.day}|${days.at(-1)?.day}`;
+    let grid = box.querySelector('.usage-grid');
+    if (grid?.dataset.key !== key) {
+        const scrollLeft = box.scrollLeft;
+        const focused = document.activeElement?.closest?.('#usage-heatmap') ? document.activeElement.dataset.day : null;
+        grid = el('div', 'usage-grid');
+        grid.dataset.key = key;
+        for (const week of weeks) {
+            grid.append(el('span', 'usage-month'));
+            for (const d of week.days) {
+                if (!d) { grid.append(el('span', 'usage-blank')); continue; }
+                const cell = el('button', 'usage-cell');
+                cell.type = 'button';
+                cell.dataset.day = d.day;
+                grid.append(cell);
+            }
+        }
+        box.replaceChildren(grid);
+        box.scrollLeft = scrollLeft;
+        if (focused) box.querySelector(`[data-day="${focused}"]`)?.focus({ preventScroll: true });
+    }
+    const months = grid.querySelectorAll('.usage-month');
+    const cells = new Map([...grid.querySelectorAll('.usage-cell')].map((c) => [c.dataset.day, c]));
     weeks.forEach((week, i) => {
         // The first column's month is there to name the start; drop it when the next label would sit on top of it.
         const crowded = i === 0 && weeks.slice(1, 4).some((w) => w.month);
-        grid.append(el('span', 'usage-month', crowded ? null : week.month));
+        const month = (crowded ? null : week.month) ?? '';
+        if (months[i].textContent !== month) months[i].textContent = month;
         for (const d of week.days) {
-            if (!d) { grid.append(el('span', 'usage-blank')); continue; }
-            const cell = el('button', 'usage-cell');
-            cell.type = 'button';
-            cell.dataset.day = d.day;
-            cell.dataset.level = String(d.level);
-            cell.title = `${usageDayName(d.day)} · ${formatTokens(d.total)}`;
-            cell.setAttribute('aria-label', cell.title);
-            if (d.day === picked) cell.classList.add('selected');
-            grid.append(cell);
+            const cell = d && cells.get(d.day);
+            if (!cell) continue;
+            const level = String(d.level);
+            const label = `${usageDayName(d.day)} · ${formatTokens(d.total)}`;
+            if (cell.dataset.level !== level) cell.dataset.level = level;
+            if (cell.title !== label) { cell.title = label; cell.setAttribute('aria-label', label); }
         }
     });
-    box.replaceChildren(grid);
+    markUsagePicked();
     if (state.usageStick) { box.scrollLeft = box.scrollWidth; state.usageStick = false; } // the newest week in view
-    else box.scrollLeft = scrollLeft;
-    if (focused) box.querySelector(`[data-day="${focused}"]`)?.focus({ preventScroll: true });
-    renderUsageDay(state.usageHover ?? picked);
 }
 
-/** 用量 › one day: the total, its four parts and each agent's share. */
+/** Ring the picked day; it is the heatmap's one Tab stop (the arrow keys move from there). */
+function markUsagePicked() {
+    const cells = $('usage-heatmap').querySelectorAll('.usage-cell');
+    const picked = usagePicked();
+    const stop = [...cells].find((c) => c.dataset.day === picked) ?? cells[cells.length - 1];
+    for (const cell of cells) {
+        cell.classList.toggle('selected', cell.dataset.day === picked);
+        const tab = cell === stop ? 0 : -1;
+        if (cell.tabIndex !== tab) cell.tabIndex = tab;
+    }
+}
+
+/** 用量 › one day: the total, its four parts and each agent's share. Rewritten only when it changes (aria-live). */
 function renderUsageDay(day) {
     const d = state.usageSummary?.byDay.get(day);
-    const head = el('div', 'head');
-    head.append(el('span', 'date', usageDayName(day)), el('span', 'total', d?.total ? formatTokens(d.total) : '没有用量'));
+    const lines = [usageDayName(day), d?.total ? formatTokens(d.total) : '没有用量'];
+    if (d?.total) {
+        const [input, output, cacheWrite, cacheRead] = d.parts;
+        lines.push(`读缓存 ${formatTokens(cacheRead)} · 写缓存 ${formatTokens(cacheWrite)} · 输入 ${formatTokens(input)} · 输出 ${formatTokens(output)}`);
+        const agents = Object.entries(d.agents).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+        lines.push(agents.map(([a, n]) => `${AGENT_NAMES[a] ?? a} ${formatTokens(n)}`).join(' · '));
+    }
     const box = $('usage-day');
+    const text = lines.join('\n');
+    if (box.dataset.text === text) return;
+    box.dataset.text = text;
+    const head = el('div', 'head');
+    head.append(el('span', 'date', lines[0]), el('span', 'total', lines[1]));
     box.replaceChildren(head);
-    if (!d?.total) return;
-    const [input, output, cacheWrite, cacheRead] = d.parts;
-    box.append(el('div', 'parts', `读缓存 ${formatTokens(cacheRead)} · 写缓存 ${formatTokens(cacheWrite)} · 输入 ${formatTokens(input)} · 输出 ${formatTokens(output)}`));
-    const agents = Object.entries(d.agents).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
-    if (agents.length) box.append(el('div', 'agents', agents.map(([a, n]) => `${AGENT_NAMES[a] ?? a} ${formatTokens(n)}`).join(' · ')));
+    if (lines[2]) box.append(el('div', 'parts', lines[2]));
+    if (lines[3]) box.append(el('div', 'agents', lines[3]));
 }
 
-/** Pointing at a day shows it; clicking (or Enter) picks it, and leaving the map goes back to the picked one. */
+/** "2026-11-03" moved by n days. */
+function shiftDay(day, n) {
+    const [y, m, d] = day.split('-').map(Number);
+    return localDay(new Date(y, m - 1, d + n).getTime());
+}
+
+/**
+ * Pointing at a day or focusing it shows it; clicking (or Enter) picks it, and leaving the map goes
+ * back to the picked one. ←/→ move a week, ↑/↓ a day, picking where they land.
+ */
 function bindUsageHeatmap() {
     const box = $('usage-heatmap');
     const dayOf = (e) => e.target.closest?.('.usage-cell[data-day]')?.dataset.day;
     const show = (day) => { state.usageHover = day; renderUsageDay(day); };
+    const pick = (day) => {
+        state.usageDay = day;
+        markUsagePicked();
+        renderUsageDay(day);
+    };
     box.addEventListener('mouseover', (e) => { const day = dayOf(e); if (day) show(day); });
     box.addEventListener('focusin', (e) => { const day = dayOf(e); if (day) show(day); });
     box.addEventListener('mouseleave', () => {
         state.usageHover = null;
-        renderUsageDay(state.usageDay ?? localDay(Date.now()));
+        renderUsageDay(usagePicked());
     });
-    box.addEventListener('click', (e) => {
+    box.addEventListener('click', (e) => { const day = dayOf(e); if (day) pick(day); });
+    const STEPS = { ArrowLeft: -7, ArrowRight: 7, ArrowUp: -1, ArrowDown: 1 };
+    box.addEventListener('keydown', (e) => {
         const day = dayOf(e);
-        if (!day) return;
-        state.usageDay = day;
-        for (const cell of box.querySelectorAll('.usage-cell.selected')) cell.classList.remove('selected');
-        e.target.closest('.usage-cell').classList.add('selected');
-        renderUsageDay(day);
+        if (!day || !(e.key in STEPS) || e.altKey || e.ctrlKey || e.metaKey) return;
+        e.preventDefault();
+        const next = shiftDay(day, STEPS[e.key]);
+        const cell = box.querySelector(`.usage-cell[data-day="${next}"]`);
+        if (!cell) return; // past either end
+        pick(next);
+        cell.focus();
+        state.usageHover = next;
     });
 }
 
