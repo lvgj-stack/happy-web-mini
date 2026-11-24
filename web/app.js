@@ -1205,8 +1205,8 @@ function openUsage() {
     state.usageStick = true;
     state.usageHover = null;
     state.usageSaidStart = false;
+    queueAllUsage(); // first, so the first render already knows it is syncing (no stale "done" for screen readers)
     renderUsagePage();
-    queueAllUsage();
 }
 
 function closeUsage() {

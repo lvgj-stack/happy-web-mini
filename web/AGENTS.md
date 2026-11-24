@@ -158,7 +158,8 @@
     `usageDone` 用 `max(to, checkedTo)` 比，免得这个会话每 30 秒重拉一次、进度一直说「没统计完」。`lines.js` 的语义不变。
   - Fork 的回放（`replayEnd` / `replayScan`）：happy-cli `claude/runClaude.ts` 的 fork backfill（`HAPPY_FORK_CLAUDE_SESSION_ID`，
     非侧聊）把父会话整个 JSONL 经 protocol mapper 重发进新会话，每条 assistant 行都带着原来的 `usage`，turn id 是新的，
-    信封时间是 fork 那一刻，不处理的话父会话的全部用量会在 fork 那天再算一遍。回放一定在 CLI 接收第一条消息之前，
+    信封时间是 fork 那一刻，不处理的话父会话的全部用量会在 fork 那天再算一遍。回放通常排在用户从 App 发的第一条消息之前（回放只是进 outbox 异步发出：JSONL 很长、Fork 刚打开就发消息时，
+    这条消息的 seq 可能早于回放尾部，后面那段回放会被算进去；在 Fork 里先在终端用了一段、后来才从 App 发消息的，终端那段不计），
     回放出来的用户消息是 `role: 'session'` 信封，从 App 发的是原始的 `role: 'user'` 记录。所以 `replaysHistory(meta)`
     （有 `parentSessionId`、不是侧聊）的会话，同步前先用 `after_seq` 从头往后翻（每页 500），找第一条 `role === 'user'`
     （`tokens.js` 的 `replayEnd`），存进 `replayEnd`；seq 比它小的不计，cover 直接从 `replayEnd - 1` 开始，回放不再拉第二遍。
