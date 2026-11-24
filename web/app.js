@@ -34,7 +34,7 @@ import { capturedText, rowText, usageRows, usageTooltip } from './usage.js';
 import { contextLine, contextUsage } from './context.js';
 import { linkLabel, linkTracker, readLinkNames, scanHistory, setLinkName, writeLinkNames } from './links.js';
 import { compactCount, lineStats, syncLines } from './lines.js';
-import { tokenStats } from './tokens.js';
+import { replayEnd, replaysHistory, tokenStats } from './tokens.js';
 import { formatTokens, heatmapWeeks, summarize } from './heatmap.js';
 import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
@@ -98,6 +98,7 @@ const state = {
     usageHover: null,        // the day under the pointer or keyboard focus, shown instead of the picked one
     usageSummary: null,      // what the page shows now (heatmap.js summarize)
     usageStick: false,       // the heatmap scrolls to the newest week at the next render
+    usageSaidStart: false,   // the screen-reader status already said the count started on this visit
     deletingIds: new Set(),  // session ids being deleted by this tab, so our own delete-session push is ignored
     deletingBatch: false,
 };
@@ -212,7 +213,7 @@ function logout() {
     document.body.classList.remove('in-usage');
     socket?.disconnect();
     socket = null;
-    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, usage: new Map(), usageQueue: [], usageRunning: false, usageRender: null, usageDay: null, usageHover: null, usageSummary: null, usageStick: false, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), linkNames: {}, deletingIds: new Set(), deletingBatch: false });
+    Object.assign(state, { keys: null, token: null, current: null, sessions: new Map(), threads: new Map(), lines: new Map(), linesQueue: [], linesRunning: false, linesFirst: null, linesRender: null, usage: new Map(), usageQueue: [], usageRunning: false, usageRender: null, usageDay: null, usageHover: null, usageSummary: null, usageStick: false, usageSaidStart: false, syncedAt: 0, listSignature: null, askSignature: null, drafts: new Map(), linkNames: {}, deletingIds: new Set(), deletingBatch: false });
     $('app').hidden = true;
     $('login').hidden = false;
     desktop.reset();
@@ -979,25 +980,39 @@ function usagePageOpen() {
     return document.body.classList.contains('in-usage');
 }
 
-/** What this browser saved for a session: { v, agent, from, to, complete, ... }, or null. */
+/**
+ * What this browser saved for a session, or null: { v, agent, days, edge } plus the seqs counted
+ * (from, to, complete; absent while a fork is still looking for its first message) and the optional
+ * checkedTo (the session's seq when a sync last reached its end), replayEnd / replayScan (forks).
+ */
 function readUsageCache(id) {
     try {
         const c = JSON.parse(localStorage.getItem(USAGE_PREFIX + id) || 'null');
         const daysOk = c?.days !== null && typeof c?.days === 'object' && !Array.isArray(c.days);
-        return c?.v === 1 && Number.isFinite(c.from) && Number.isFinite(c.to) && daysOk ? c : null;
+        return c?.v === 1 && daysOk ? c : null;
     } catch {
         return null; // unreadable: count again
     }
 }
 
-/** A session's usage: { stats, cover, agent, busy, dirty, failedAt }, read from this browser on first use. */
+/** The seqs a cache counted (see syncLines), or null. */
+const usageCover = (c) => (c && Number.isFinite(c.from) && Number.isFinite(c.to) ? { from: c.from, to: c.to, complete: !!c.complete } : null);
+const seqOr = (v, d) => (Number.isFinite(v) ? v : d);
+
+/** A session's usage: { stats, cover, agent, busy, dirty, failedAt, ... }, read from this browser on first use. */
 function usageOf(s) {
     let u = state.usage.get(s.id);
     if (u) return u;
     const cached = readUsageCache(s.id);
+    const cover = usageCover(cached);
     u = {
-        stats: tokenStats(cached),
-        cover: cached && { from: cached.from, to: cached.to, complete: !!cached.complete }, // the seqs counted (see syncLines)
+        stats: tokenStats(cover ? cached : null),
+        cover, // the seqs counted (see syncLines)
+        checkedTo: cover ? seqOr(cached.checkedTo, 0) : 0, // s.seq when a sync last found nothing newer (it can run ahead of the last message)
+        // A fork's replay of its parent ends where the first app message starts (tokens.js replayEnd); until
+        // one is found, replayScan is how far the search got.
+        replayEnd: seqOr(cached?.replayEnd, null),
+        replayScan: seqOr(cached?.replayScan, 0),
         agent: agentFlavor(s.meta),
         busy: false,  // a sync is running
         dirty: false, // a message came in during it
@@ -1008,18 +1023,25 @@ function usageOf(s) {
 }
 
 function saveUsage(s, u) {
-    if (!u.cover) return;
+    const replay = replaysHistory(s.meta) ? (u.replayEnd !== null ? { replayEnd: u.replayEnd } : { replayScan: u.replayScan }) : {};
+    if (!u.cover && !replaysHistory(s.meta)) return;
+    const counted = u.cover ? { ...u.cover, ...u.stats.toJSON(), checkedTo: u.checkedTo } : { days: {} };
     try {
-        localStorage.setItem(USAGE_PREFIX + s.id, JSON.stringify({ v: 1, agent: u.agent, ...u.cover, ...u.stats.toJSON() }));
+        localStorage.setItem(USAGE_PREFIX + s.id, JSON.stringify({ v: 1, agent: u.agent, ...counted, ...replay }));
     } catch (e) {
         console.error(e);
     }
 }
 
+/** A fork that has no message from an app yet: all of it is the parent's replay, nothing to count. */
+const usageAllReplay = (s, u) => replaysHistory(s.meta) && u.replayEnd === null;
+
 /** Counted up to the session's newest message, back to its first. */
 function usageDone(s) {
-    const { cover } = usageOf(s);
-    return !!cover?.complete && cover.to >= (s.seq ?? 0);
+    const u = usageOf(s);
+    const seq = s.seq ?? 0;
+    if (usageAllReplay(s, u)) return u.replayScan >= seq;
+    return !!u.cover?.complete && Math.max(u.cover.to, u.checkedTo) >= seq;
 }
 
 function needsUsage(s) {
@@ -1059,6 +1081,28 @@ async function runUsage() {
     }
 }
 
+/**
+ * A fork's first message from an app, searched from the start (after_seq pages) and remembered:
+ * happy-cli claude/runClaude.ts replays the parent's JSONL, usage and all, before the CLI takes any
+ * message, so whatever comes before that message is the parent's and was counted there.
+ */
+async function findReplayEnd(s, u, alive, url) {
+    while (alive() && u.replayEnd === null) {
+        const want = s.seq ?? 0;
+        const page = await api('GET', url(`after_seq=${u.replayScan}&limit=${USAGE_PAGE}`));
+        if (!alive()) return;
+        const rows = await messageRows(s, page.messages);
+        if (!alive()) return;
+        u.replayEnd = replayEnd(rows);
+        if (rows.length) u.replayScan = Math.max(u.replayScan, rows.at(-1).seq);
+        const end = !page.hasMore || !rows.length;
+        if (end && u.replayEnd === null) u.replayScan = Math.max(u.replayScan, want); // s.seq can run ahead of the last message
+        saveUsage(s, u);
+        usageChanged();
+        if (end) return;
+    }
+}
+
 async function syncSessionUsage(s) {
     const u = usageOf(s);
     // Gone on logout; closing the page stops it after the page in flight (what came before is saved).
@@ -1067,33 +1111,56 @@ async function syncSessionUsage(s) {
     u.busy = true;
     u.dirty = false;
     try {
-        await syncLines({
-            stats: u.stats,
-            cover: u.cover,
-            target: () => s.seq ?? 0,
-            fetchOlder: async (before) => {
-                const page = await api('GET', url(`before_seq=${before}&limit=${USAGE_PAGE}`));
-                return { rows: await messageRows(s, page.messages.slice().reverse()), hasMore: page.hasMore }; // DESC -> ASC
-            },
-            fetchNewer: async (after) => {
-                const page = await api('GET', url(`after_seq=${after}&limit=${USAGE_PAGE}`));
-                return { rows: await messageRows(s, page.messages), hasMore: page.hasMore };
-            },
-            save: (cover) => {
-                if (!alive()) return;
-                u.cover = cover;
-                saveUsage(s, u);
-                usageChanged();
-            },
-            alive,
-        });
+        if (replaysHistory(s.meta) && u.replayEnd === null) await findReplayEnd(s, u, alive, url);
+        if (alive() && !usageAllReplay(s, u)) await syncUsagePages(s, u, alive, url);
     } catch (e) {
         console.error(e);
         u.failedAt = Date.now(); // the next list sync after a minute tries again
     } finally {
+        // Forget the keys this sync saw, keeping the edges (all a later sync needs), or they pile up all session long.
+        u.stats = tokenStats(u.stats.toJSON());
         u.busy = false;
     }
     if (u.dirty && state.usage.get(s.id) === u) wantUsage(s); // what came in while it ran
+}
+
+/** The newer-then-older walk (syncLines) over a session's messages, a fork's replay left out. */
+async function syncUsagePages(s, u, alive, url) {
+    // A fork's replay was read while looking for its end: start right at the first message.
+    if (u.replayEnd !== null) u.cover ??= { from: 0, to: u.replayEnd - 1, complete: true };
+    const skip = u.replayEnd ?? 0;
+    const stats = u.stats;
+    let caughtUp = 0; // s.seq when a page came back with nothing after it
+    await syncLines({
+        stats: { see: (raw, row) => (row.seq < skip ? false : stats.see(raw, row)) },
+        cover: u.cover,
+        target: () => s.seq ?? 0,
+        fetchOlder: async (before) => {
+            const want = s.seq ?? 0;
+            const page = await api('GET', url(`before_seq=${before}&limit=${USAGE_PAGE}`));
+            if (before === LATEST) caughtUp = Math.max(caughtUp, want); // the newest page
+            return { rows: await messageRows(s, page.messages.slice().reverse()), hasMore: page.hasMore }; // DESC -> ASC
+        },
+        fetchNewer: async (after) => {
+            const want = s.seq ?? 0;
+            const page = await api('GET', url(`after_seq=${after}&limit=${USAGE_PAGE}`));
+            if (!page.hasMore || !page.messages.length) caughtUp = Math.max(caughtUp, want);
+            return { rows: await messageRows(s, page.messages), hasMore: page.hasMore };
+        },
+        save: (cover) => {
+            if (!alive()) return;
+            u.cover = cover;
+            saveUsage(s, u);
+            usageChanged();
+        },
+        alive,
+    });
+    // The server hands out a seq before it turns a duplicate away, so s.seq can stay ahead of
+    // the last message for good; a walk that reached the end counts as caught up to it.
+    if (alive() && u.cover && caughtUp > u.checkedTo) {
+        u.checkedTo = caughtUp;
+        saveUsage(s, u);
+    }
 }
 
 /** A pushed message while the page is open: fetched with the rest of its session's new messages. */
@@ -1120,7 +1187,7 @@ function usageEntries() {
         const id = key.slice(USAGE_PREFIX.length);
         if (state.usage.has(id)) continue;
         const c = readUsageCache(id);
-        if (c) entries.set(id, { agent: typeof c.agent === 'string' ? c.agent : 'claude', days: tokenStats(c).days });
+        if (usageCover(c)) entries.set(id, { agent: typeof c.agent === 'string' ? c.agent : 'claude', days: tokenStats(c).days });
     }
     for (const [id, u] of state.usage) if (u.cover) entries.set(id, { agent: u.agent, days: u.stats.days });
     return entries;
@@ -1137,6 +1204,7 @@ function openUsage() {
     document.body.classList.add('in-usage', 'in-chat');
     state.usageStick = true;
     state.usageHover = null;
+    state.usageSaidStart = false;
     renderUsagePage();
     queueAllUsage();
 }
@@ -1160,7 +1228,11 @@ function renderUsagePage() {
     const progress = syncing
         ? `统计中 ${sessions.length - behind} / ${sessions.length} 个会话…`
         : `已统计 ${entries.size} 个会话` + (behind ? `，${behind} 个没统计完，稍后重试` : '');
-    if ($('usage-progress').textContent !== progress) $('usage-progress').textContent = progress; // role=status: say it only when it moves
+    if ($('usage-progress').textContent !== progress) $('usage-progress').textContent = progress;
+    // Screen readers hear when the count starts (once per visit) and where it ends, not every step of the counter.
+    const said = syncing ? (state.usageSaidStart ? null : '正在统计用量…') : progress;
+    if (syncing) state.usageSaidStart = true;
+    if (said !== null && $('usage-status').textContent !== said) $('usage-status').textContent = said;
 
     const stat = (label, value, when) => {
         const node = el('div', 'usage-stat');

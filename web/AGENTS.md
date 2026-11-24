@@ -150,18 +150,43 @@
 - Token 用量（`tokens.js` 读 usage、`heatmap.js` 汇总和分档，`app.js` 的 `// ---------- Token usage` 段）：只在用量页开着时同步
   （`in-usage`；页面关掉后当前这一页拉完就停），`state.sessions` 里所有会话（含已归档、侧聊）一次一个，同样走 `syncLines`，每页 500 条，
   最近活跃的先同步；`syncSessions` 结束和收到推送时补新消息，推送不直接累加。失败后一分钟内不重试。缓存在 `happy.usage.<id>`：
-  `{ v: 1, agent, from, to, complete, days, edge }`，`days` 是本地日期 → `[输入, 输出, 写缓存, 读缓存]`，`agent` 是 `agentFlavor(meta)`。
+  `{ v: 1, agent, from, to, complete, days, edge, checkedTo?, replayEnd?, replayScan? }`，`days` 是本地日期 → `[输入, 输出, 写缓存, 读缓存]`，`agent` 是 `agentFlavor(meta)`。
+  后三个是后加的可选字段，没有就按 0 / 未知处理，旧缓存照样能读。每次同步完把 `u.stats` 用 `toJSON()` 重建一遍，
+  丢掉本次见过的键（只留 edge），不然重度用户开着页面不刷新时这个 Set 会一直长。
+  - `checkedTo`：server 先分配 seq 再拒掉重复的 `localId`，所以会话的 `seq` 可能比最后一条消息大，永远等不到。
+    往后翻到空页或 `hasMore: false`（或者拿到最新一页）时，把发请求那一刻的 `s.seq` 记成 `checkedTo`，
+    `usageDone` 用 `max(to, checkedTo)` 比，免得这个会话每 30 秒重拉一次、进度一直说「没统计完」。`lines.js` 的语义不变。
+  - Fork 的回放（`replayEnd` / `replayScan`）：happy-cli `claude/runClaude.ts` 的 fork backfill（`HAPPY_FORK_CLAUDE_SESSION_ID`，
+    非侧聊）把父会话整个 JSONL 经 protocol mapper 重发进新会话，每条 assistant 行都带着原来的 `usage`，turn id 是新的，
+    信封时间是 fork 那一刻，不处理的话父会话的全部用量会在 fork 那天再算一遍。回放一定在 CLI 接收第一条消息之前，
+    回放出来的用户消息是 `role: 'session'` 信封，从 App 发的是原始的 `role: 'user'` 记录。所以 `replaysHistory(meta)`
+    （有 `parentSessionId`、不是侧聊）的会话，同步前先用 `after_seq` 从头往后翻（每页 500），找第一条 `role === 'user'`
+    （`tokens.js` 的 `replayEnd`），存进 `replayEnd`；seq 比它小的不计，cover 直接从 `replayEnd - 1` 开始，回放不再拉第二遍。
+    还没有 App 发的消息时整个会话不计，`replayScan` 记下翻到哪了，下次从那接着翻。
+    Codex 的 fork backfill（`codex/runCodex.ts`，`HAPPY_FORK_CODEX_THREAD_ID`）不带 usage，同样处理也无妨。
+    只在终端里（本地模式）往 fork 会话里打字的，没有原始 `role: 'user'` 记录，整个会话都不计。
   - 哪些算：session 协议里 `role: 'agent'` 且带 `usage` 的信封（subagent 的也算；Codex 的 usage 单独放在一个空文本的 `service` 信封里，没有 turn），
-    旧格式 Claude `output` 里 `assistant` 消息的 `message.usage`。按消息的 `createdAt`（server 时间）的本地日期归天，没有时退回信封里的时间。
+    旧格式 Claude `output` 里 `assistant` 消息的 `message.usage`，旧格式 Codex 的 `content.type: 'codex'` 里的 `token_count`
+    （happy-cli 7f178466c `codex/runCodex.ts` 原样转发 Codex 的 TokenCountEvent：只取 `info.last_token_usage`，
+    即这一次请求的，`total_token_usage` 是累计的不能加；输入里含缓存，按 `pickTokenUsage` 的做法减去 `cached_input_tokens`，
+    键里带上累计的 `total_tokens`，因为 Codex 每次更新限额都会把同一份 info 再发一遍）。按消息的 `createdAt`（server 时间）的本地日期归天，没有时退回信封里的时间。
     对照 happy-wire `sessionProtocol.ts`（`usage`）、happy-cli `claude/utils/sessionProtocolMapper.ts`（`attachUsageToLastEnvelope`）、
     `codex/utils/sessionProtocolMapper.ts`（`token_count`）。
+  - 没有 usage 的时期：session 协议（happy-cli b0c781ce6，2026-02-12）之后，Claude 的信封在 `attachUsageToLastEnvelope`
+    （538509172，2026-07-11）之前不带 usage，Codex 这段时间的 `token_count` 也不产生任何信封，所以这段时间（用当时的 CLI 跑的会话）
+    热力图是空的，不是 bug。更早的 Claude 旧格式和 Codex 旧格式都有 usage，能统计。
   - 去重：Claude 一次回复按 content block 拆成几条消息，每条都带同一份 usage。旧格式按 `message.id` 去重；
     session 信封里没有 message id，用 `turn | subagent | 四个数` 当键。本次同步见过的键记在内存里；另外把 seq 最小和最大的那条的键存进缓存（`edge`），
-    下次往前或往后接页时，跨在边界上的重复也挡得住。
+    下次往前或往后接页时，跨在边界上的重复也挡得住。edge 只记 seq 最小和最大的那条：一次回复恰好被页边界切开、
+    中间又夹着 subagent 和主 agent 交替的回复时，边上记的可能是别的回复的键，极少数情况下会重复算一次。
+    Codex 的 usage 信封没有 turn，只按四个数去重。
   - 汇总读 `localStorage` 里所有 `happy.usage.*`（本次加载过的会话用内存里的），所以 server 上已删的会话照样计入；删除会话不清这个键，退出登录清掉。
+  - 热力图的四档按这 53 周里有用量的那些天算四分位，更早的不算进去（否则很久以前的高峰会把现在的格子都压成浅色）。
   - 渲染 250ms 节流。热力图的格子只在第一天或最后一天变了（新的一天 / 一周）时重建，其余时候原地改 `data-level` / `title` / 月份，
     否则同步期间重画会吃掉刚好跨在重建上的点击；只有刚打开时滚到最右（最近一周）。
-  - 读屏：`#usage-day`（aria-live）和 `#usage-progress`（role=status）文字没变就不重写，免得同步期间反复朗读。
+  - 读屏：`#usage-day`（aria-live）文字没变就不重写。`#usage-progress` 是看得见的计数，不是 live region；
+    朗读交给隐藏的 `#usage-status`（role=status，`.sr-only`），每次打开页面只说一次「正在统计用量…」，结束时说最后的结果，
+    中间「统计中 k / N」的每一步都不念。
     格子用 roving tabindex：只有选中的那天能 Tab 进去，←/→ 移一周、↑/↓ 移一天，移到哪天就选中哪天。
   - 缓存的 `days` 不是普通对象（数组、null）时当作没有缓存，这个会话重新统计。
 

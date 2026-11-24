@@ -52,9 +52,11 @@ export function levelOf(total, [q1, q2, q3]) {
     return 4;
 }
 
-/** Monday-first week columns ending in today's week; days after today are null, month is set where a 1st falls. */
+/**
+ * Monday-first week columns ending in today's week; days after today are null, month is set where a 1st falls.
+ * The levels are cut from the days shown, so a busy stretch older than the map does not wash it out.
+ */
 export function heatmapWeeks(byDay, today, weeks = 53) {
-    const cuts = thresholds([...byDay.values()].map((d) => d.total));
     const sinceMonday = (today.getDay() + 6) % 7;
     const start = addDays(today, -sinceMonday - (weeks - 1) * 7);
     const todayKey = localDay(today.getTime());
@@ -70,12 +72,13 @@ export function heatmapWeeks(byDay, today, weeks = 53) {
                 days.push(null);
                 continue;
             }
-            const total = byDay.get(day)?.total || 0;
-            days.push({ day, total, level: levelOf(total, cuts) });
+            days.push({ day, total: byDay.get(day)?.total || 0 });
         }
         if (w === 0 && month === null) month = `${addDays(start, 0).getMonth() + 1}月`;
         columns.push({ month, days });
     }
+    const cuts = thresholds(columns.flatMap((c) => c.days).filter(Boolean).map((d) => d.total));
+    for (const c of columns) for (const d of c.days) if (d) d.level = levelOf(d.total, cuts);
     return columns;
 }
 

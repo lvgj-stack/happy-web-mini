@@ -106,3 +106,15 @@ test('summarize: all-zero days give no best; missing parts do not make NaN', () 
     const m = summarize([{ agent: 'a', days: { '2026-11-01': [3, 2] } }], today);
     assert.equal(m.total, 5);
 });
+
+test('heatmapWeeks: the levels come from the days shown, not older ones', () => {
+    const byDay = new Map([
+        ['2024-01-01', { total: 1e9 }], // long before the map
+        ['2026-11-20', { total: 10 }],
+        ['2026-11-21', { total: 20 }],
+        ['2026-11-22', { total: 30 }],
+        ['2026-11-23', { total: 40 }],
+    ]);
+    const levels = Object.fromEntries(heatmapWeeks(byDay, today).flatMap((w) => w.days).filter((d) => d?.total).map((d) => [d.day, d.level]));
+    assert.deepEqual(levels, { '2026-11-20': 1, '2026-11-21': 2, '2026-11-22': 3, '2026-11-23': 4 });
+});

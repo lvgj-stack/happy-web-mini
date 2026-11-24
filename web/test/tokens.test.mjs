@@ -1,7 +1,7 @@
 // node --test: per-reply token usage from decrypted messages, summed per local day.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { replyUsage, tokenStats } from '../tokens.js';
+import { replayEnd, replaysHistory, replyUsage, tokenStats } from '../tokens.js';
 
 const env = (usage, extra = {}) => ({ role: 'session', content: { type: 'session', data: { id: 'e', time: 1, role: 'agent', turn: 't1', ev: { t: 'text', text: 'hi' }, usage, ...extra } } });
 const u = { input_tokens: 4, cache_creation_input_tokens: 2528, cache_read_input_tokens: 13594, output_tokens: 6 };
@@ -60,4 +60,49 @@ test('tokenStats: bad cache starts empty', () => {
     assert.deepEqual(tokenStats({ days: 'x' }).days, {});
     assert.deepEqual(tokenStats({ days: { 'bad': [1] , '2026-01-01': [1, 2, 3, 4] }, edge: 5 }).days, { '2026-01-01': [1, 2, 3, 4] });
     assert.deepEqual(tokenStats(null).days, {});
+});
+
+// happy-cli 7f178466c codex/runCodex.ts: the raw Codex event, wrapped by sendCodexMessage.
+const codexCount = (info) => ({ role: 'agent', content: { type: 'codex', data: { type: 'token_count', info, rate_limits: null, id: 'u1' } }, meta: { sentFrom: 'cli' } });
+const tokenUsage = (input, cached, output, total) => ({ input_tokens: input, cached_input_tokens: cached, output_tokens: output, reasoning_output_tokens: 3, total_tokens: total });
+
+test('replyUsage: old Codex token_count reads the last request, cached taken out of input', () => {
+    const r = replyUsage(codexCount({ last_token_usage: tokenUsage(1200, 1000, 50, 1250), total_token_usage: tokenUsage(5000, 3000, 400, 5400), model_context_window: 272000 }));
+    assert.deepEqual(pick(r), { input: 200, output: 50, cacheWrite: 0, cacheRead: 1000 });
+    assert.equal(r.time, null);
+    assert.equal(replyUsage(codexCount(null)), null); // a rate-limit update before any request
+    assert.equal(replyUsage(codexCount({ total_token_usage: tokenUsage(5000, 3000, 400, 5400) })), null); // never the running total
+    assert.equal(replyUsage({ role: 'agent', content: { type: 'codex', data: { type: 'message', message: 'hi' } } }), null);
+});
+
+test('tokenStats: a repeated old Codex token_count counts once, a new request with equal numbers counts', () => {
+    const st = tokenStats(null);
+    const last = tokenUsage(1200, 1000, 50, 1250);
+    assert.equal(st.see(codexCount({ last_token_usage: last, total_token_usage: tokenUsage(1200, 1000, 50, 1250) }), { seq: 1, createdAt: at }), true);
+    assert.equal(st.see(codexCount({ last_token_usage: last, total_token_usage: tokenUsage(1200, 1000, 50, 1250) }), { seq: 2, createdAt: at }), false);
+    assert.equal(st.see(codexCount({ last_token_usage: last, total_token_usage: tokenUsage(2400, 2000, 100, 2500) }), { seq: 3, createdAt: at }), true);
+    assert.deepEqual(st.days['2026-11-03'], [400, 100, 0, 2000]);
+});
+
+test('replaysHistory: forks replay their parent, side chats do not', () => {
+    assert.equal(replaysHistory({ parentSessionId: 'p' }), true);
+    assert.equal(replaysHistory({ parentSessionId: 'p', isSideChat: true }), false);
+    assert.equal(replaysHistory({}), false);
+    assert.equal(replaysHistory(undefined), false);
+});
+
+test('replayEnd: the first message sent from an app, not a replayed user turn', () => {
+    const replayedUser = { role: 'session', content: { type: 'session', data: { id: 'r', time: 1, role: 'user', ev: { t: 'text', text: 'old question' } } } };
+    const appUser = { role: 'user', content: { type: 'text', text: 'new question' }, meta: { sentFrom: 'web' } };
+    const rows = [
+        { seq: 1, raw: replayedUser },
+        { seq: 2, raw: env(u) },
+        { seq: 3, raw: appUser },
+        { seq: 4, raw: env({ ...u, input_tokens: 9 }) },
+        { seq: 5, raw: appUser },
+    ];
+    assert.equal(replayEnd(rows), 3);
+    assert.equal(replayEnd(rows.slice(0, 2)), null);
+    assert.equal(replayEnd([]), null);
+    assert.equal(replayEnd([{ seq: 1, raw: null }]), null);
 });
