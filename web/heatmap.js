@@ -82,11 +82,17 @@ export function heatmapWeeks(byDay, today, weeks = 53) {
     return columns;
 }
 
-/** Compact token count: thousands separators, then 万 and 亿 units. */
+/** Compact token count, three significant digits: "820", "8.24K", "125K", "76.3M", "6.57B". */
 export function formatTokens(n) {
-    const trim = (x) => String(Number(x.toFixed(1)));
-    if (n < 1e4) return n.toLocaleString('en-US');
-    if (n < 1e6) return `${trim(n / 1e4)} 万`;
-    if (Math.round(n / 1e4) < 1e4) return `${Math.round(n / 1e4).toLocaleString('en-US')} 万`;
-    return `${trim(n / 1e8)} 亿`;
+    if (n < 1000) return String(Math.round(n));
+    const units = ['K', 'M', 'B'];
+    let v = n / 1000;
+    let i = 0;
+    for (;;) {
+        const text = String(Number(v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)));
+        // 999,950 rounds to "1000K": carry into the next unit instead.
+        if (Number(text) < 1000 || i === units.length - 1) return `${text}${units[i]}`;
+        v /= 1000;
+        i++;
+    }
 }

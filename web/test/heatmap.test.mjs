@@ -86,18 +86,21 @@ test('heatmapWeeks: month labels, totals and levels', () => {
     assert.equal(w[51].days[0].level, 0);
 });
 
-test('formatTokens', () => {
+test('formatTokens: three significant digits with K / M / B', () => {
     assert.equal(formatTokens(0), '0');
-    assert.equal(formatTokens(8240), '8,240');
-    assert.equal(formatTokens(125000), '12.5 万');
-    assert.equal(formatTokens(100000), '10 万');
-    assert.equal(formatTokens(48200000), '4,820 万');
-    assert.equal(formatTokens(1240000000), '12.4 亿');
-    assert.equal(formatTokens(100000000), '1 亿');
-    assert.equal(formatTokens(99999600), '1 亿');
-    assert.equal(formatTokens(999999), '100 万');
-    assert.equal(formatTokens(9999), '9,999');
-    assert.equal(formatTokens(10000), '1 万');
+    assert.equal(formatTokens(820), '820');
+    assert.equal(formatTokens(999), '999');
+    assert.equal(formatTokens(1000), '1K');
+    assert.equal(formatTokens(8240), '8.24K');
+    assert.equal(formatTokens(125000), '125K');
+    assert.equal(formatTokens(48200000), '48.2M');
+    assert.equal(formatTokens(76270000), '76.3M');
+    assert.equal(formatTokens(6570000000), '6.57B');
+    assert.equal(formatTokens(1240000000000), '1240B');
+    // Rounding that reaches 1000 of a unit carries into the next one.
+    assert.equal(formatTokens(999950), '1M');
+    assert.equal(formatTokens(999600000), '1B');
+    assert.equal(formatTokens(9996), '10K');
 });
 
 test('summarize: all-zero days give no best; missing parts do not make NaN', () => {
