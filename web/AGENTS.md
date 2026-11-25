@@ -61,6 +61,18 @@
   （没选强度时再加 `effort: null`），CLI 就不用它内置的默认值，改按那台电脑的 `~/.codex/config.toml`。
 - 实时推送走 Socket.IO：`new-message`、`update-session`、`new-session`、`delete-session`，以及临时事件 `activity`（含 `thinking`）和
   `machine-activity`。断线时退回每 3 秒轮询正在看的会话，重连后补拉。
+- 工作状态（`activity.js`）：同时看心跳 `thinking` 和主 agent 尚未结束的 session protocol 回合。Codex 自动续跑的
+  `ensureCodexEnvelopeTurn` 会补 `turn-start`，但 `runCodex.ts` 只在 `task_started` 时把心跳 `thinking` 置真，所以不能只看心跳。
+  实时消息即使会话还没打开也要解密并跟踪回合；补拉历史共用同一逻辑，按 server `seq` 忽略旧记录，子 agent 和无 turn 的 usage 不参与。
+  会话列表同步时，已知仍在跑但消息 seq 落后的会话也要补拉，避免断线期间漏掉 `turn-end` 后一直转圈；
+  活动补拉用独立的 `activitySyncedSeq`，不能用收到过的最大 `thread.afterSeq`，否则后来的消息会跳过缺口；
+  已打开的线程补回缺失消息，未打开的会话只同步活动状态，不创建聊天线程。
+  `turn-end` 立即结束工作并屏蔽 2.5 秒的迟到 thinking 心跳，新回合开始立即解除屏蔽；离线清掉未结束回合的运行标记。
+  心跳 `activeAt` 来自 CLI 时间、被 server 截掉未来值（`sessionUpdateHandler.ts`）；结束时间用 CLI 信封 `time` 与消息
+  `createdAt` 的较小值做同样的上界处理，早于结束的旧心跳即使迟到超过 2.5 秒也忽略，兼容 CLI 时钟快 / 慢。
+  Codex 子进程退出可能没有 `turn-end`，CLI 的 `ready` / `Process exited unexpectedly` 也视为结束；离线时返回的旧页不标记为运行中。
+  已收到 `turn-end` 时，随后无 turn 标识的 `ready` 只确认已结束回合，不结束可能已开始的自动续跑（`runCodex.ts` 的 `finally`）。
+  回合状态只存内存；只有最新页里的回合没有结束事件时才推断还在工作，最终离线仍优先。
 - 删除已归档会话（`deleteSession.js`）：调用 `DELETE /v1/sessions/:id`（404 视为已删，对照 iOS `SessionActions.deliver`）；
   只对已归档的普通会话开放，Bot / 任务不提供删除（对照 iOS `SessionInfoModel.keepsConversation`、Android `SessionOps.delete`）。
   本标签页发起删除时把会话 id 放进 `state.deletingIds`，忽略服务端回推的 `delete-session` 避免和本地收尾冲突；

@@ -22,6 +22,7 @@ import { loadBuildInfo, versionText } from './version.js';
 import { commandText, parseLocalCommand } from './localCommand.js';
 import { backgroundStops, backgroundText, backgroundTracker } from './background.js';
 import { addBreak, isBreak, isCut, segmentFor } from './turns.js';
+import { isThinking as sessionThinking, noteTurnActivity, setActivity, THINKING_MUTE } from './activity.js';
 import { launchedSubagents, stepsText, subagentStore } from './subagents.js';
 import { resumeAvailability, resumeDirectoryGone, resumeFailure, resumeFallback } from './resume.js';
 import { forkAvailability, forkCopyRequest, forkSpawnParams } from './fork.js';
@@ -243,6 +244,7 @@ async function ingest(raw) {
     const grew = known && next.seq > (known.seq ?? 0);
     if (known) Object.assign(known, next); else state.sessions.set(raw.id, next);
     const s = known ?? next;
+    if (!s.active) setActivity(s, { active: false });
     if (grew) sessionChanged(s);
     // Just loaded: whether it is working is only known at its first keepalive (≤2s).
     else if (!known) { s.changedAt = Date.now() - UNREAD_SETTLE + THINKING_MUTE; setTimeout(() => renderList(), THINKING_MUTE + 50); }
@@ -263,6 +265,8 @@ async function syncSessions() {
         }
         cursor = page.hasNext ? page.nextCursor : null;
     } while (cursor);
+    // Reconnects can miss turn-end pushes for chats other than the one on screen.
+    await Promise.all([...state.sessions.values()].filter((s) => s.turnActivity?.running).map(syncActivity));
     queueAllLines();
     renderList();
     renderHead();
@@ -447,16 +451,19 @@ const waitingLabel = (s) => (waitingSets(s).every((set) => set.via === 'approval
 
 /** Between turns, but a subagent or command it started in the background still runs (known once opened here). */
 function inBackground(s) {
-    return !s.thinking && !!s.active && !isArchived(s) && (state.threads.get(s.id)?.background?.tasks().length ?? 0) > 0;
+    return !isThinking(s) && !!s.active && !isArchived(s) && (state.threads.get(s.id)?.background?.tasks().length ?? 0) > 0;
 }
 
+/** The row and chat share heartbeat plus main-turn evidence, while the CLI is online. */
+const isThinking = (s) => isOnline(s) && sessionThinking(s);
+
 /** In a turn, or something it started still runs in the background: the row spins. */
-const isWorking = (s) => !!s.thinking || inBackground(s);
+const isWorking = (s) => isThinking(s) || inBackground(s);
 
 /** 等你回答 > 正在工作 / 后台运行中 > 闲置: what the row's icon says. */
 function rowStatus(s) {
     if (waitingSets(s).length) return waitingLabel(s);
-    if (s.thinking) return '正在工作';
+    if (isThinking(s)) return '正在工作';
     if (inBackground(s)) return '后台运行中';
     return isUnread(s) ? '已完成，还没看' : '闲置';
 }
@@ -479,8 +486,6 @@ function saveSeen() {
 /** How long a session must sit still before it counts as done: longer than the
  *  gap between two turns or a message and the agent picking it up (keepalives come every 2s). */
 const UNREAD_SETTLE = 6000;
-/** After a turn ends, how long a lagging "thinking" keepalive is ignored. */
-const THINKING_MUTE = 2500;
 
 /** Has messages newer than the newest one seen in this browser. */
 function hasUnseen(s) {
@@ -497,6 +502,25 @@ function sessionChanged(s) {
     s.changedAt = Date.now();
     clearTimeout(s.settleTimer);
     s.settleTimer = setTimeout(() => renderList(), UNREAD_SETTLE + 50);
+}
+
+/** Flip a row's status without rebuilding it on every heartbeat or turn step. */
+function refreshActivityRow(s) {
+    const r = $('list').querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
+    if (r) { r.classList.toggle('busy', isWorking(s)); r.title = rowStatus(s); }
+}
+
+/** Track decrypted turn evidence even before this session's thread has been opened. */
+function trackActivity(s, raw, seq, sentAt) {
+    const before = isThinking(s);
+    noteTurnActivity(s, raw, seq, Date.now(), sentAt);
+    if (before === isThinking(s)) return;
+    sessionChanged(s);
+    renderList();
+    refreshActivityRow(s);
+    const thread = state.threads.get(s.id);
+    if (thread?.newest) refreshTurn(thread, thread.newest);
+    if (s === state.current) renderThinking();
 }
 
 /** The settings or 用量 page is over the chat. */
@@ -1897,11 +1921,13 @@ async function fillViewport(s, thread) {
 }
 
 /** Decrypt a page in parallel; views come back in the page's order. */
-function decodePage(s, messages) {
-    return Promise.all(messages.map(async (m) => ({
-        m,
-        view: decoded(m.content?.t === 'encrypted' ? await decryptJSON(s.dataKey, m.content.c) : null, m),
-    })));
+async function decodePage(s, messages) {
+    const rows = await Promise.all(messages.map(async (m) => {
+        const raw = await decryptMessage(s, m);
+        return { m, raw, view: decoded(raw, m) };
+    }));
+    for (const { m, raw } of rows) trackActivity(s, raw, m.seq, m.createdAt);
+    return rows;
 }
 
 /** A record as shown, with when it was sent and the context usage it reports. */
@@ -1966,6 +1992,30 @@ async function pollMessages(s = state.current) {
             const decoded = await decodePage(s, fresh);
             noteBreaks(thread, decoded);
             for (const { m, view } of decoded) renderMessage(thread, view, m.seq);
+            more = page.hasMore;
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+/** Catch up known running sessions so a missed turn-end cannot leave their rows spinning. */
+async function syncActivity(s) {
+    if (!isOnline(s)) return;
+    const thread = state.threads.get(s.id);
+    // thread.afterSeq is only the largest received seq: a later push can leap
+    // over a missing turn-end. This cursor instead covers the activity catch-up.
+    let afterSeq = Math.max(s.turnActivity.seq, s.activitySyncedSeq ?? 0);
+    if (s.seq <= afterSeq) return;
+    try {
+        let more = true;
+        while (more) {
+            const page = await api('GET', `/v3/sessions/${encodeURIComponent(s.id)}/messages?after_seq=${afterSeq}&limit=200`);
+            if (!page.messages.length) break;
+            const rows = await decodePage(s, page.messages);
+            if (thread) for (const { m, raw } of rows) await acceptMessage(s, m, raw);
+            for (const m of page.messages) afterSeq = Math.max(afterSeq, m.seq);
+            s.activitySyncedSeq = afterSeq;
             more = page.hasMore;
         }
     } catch (e) {
@@ -2287,17 +2337,6 @@ function addToTurn(thread, block, view, seq, shows = true) {
         case 'turn-end': {
             block.ended = true;
             block.end = view.time;
-            // The "thinking" flag rides on keepalives and lags the turn's end;
-            // stop showing it now, and ignore reports older than this moment.
-            const s = thread.session;
-            if (s && block === thread.newest) {
-                // Measured on this browser's clock: the CLI's clock may be off,
-                // and the server clamps keepalive times to its own.
-                s.thinkingMutedUntil = Date.now() + THINKING_MUTE;
-                if (s.thinking) sessionChanged(s);
-                s.thinking = false;
-                document.querySelector(`#list .row[data-id="${CSS.escape(s.id)}"]`)?.classList.toggle('busy', isWorking(s));
-            }
             break;
         }
         case 'tool-end':
@@ -2328,7 +2367,7 @@ function addToTurn(thread, block, view, seq, shows = true) {
 }
 
 function isRunning(thread, block) {
-    return !block.ended && block === thread.newest && isOnline(thread.session) && !isCut(block, thread.breaks);
+    return !block.ended && block === thread.newest && isThinking(thread.session) && !isCut(block, thread.breaks);
 }
 
 function setCollapsed(block, collapsed) {
@@ -2614,7 +2653,7 @@ function renderThinking() {
     const thread = s && state.threads.get(s.id);
     const turnShowsIt = thread?.newest && isRunning(thread, thread.newest);
     const waiting = awaiting(thread);
-    const on = !!(thread && (s.thinking || waiting) && !isArchived(s) && !turnShowsIt);
+    const on = !!(thread && (isThinking(s) || waiting) && !isArchived(s) && !turnShowsIt);
     renderStop(s, thread, turnShowsIt || on);
     // Idle, but a subagent or command it started in the background still runs.
     const tasks = thread && !on && !turnShowsIt && s.active && !isArchived(s) ? thread.background?.tasks() ?? [] : [];
@@ -2624,7 +2663,7 @@ function renderThinking() {
     const next = node ?? el('div', 'msg thinking-now');
     next.id = 'thinking';
     if (tasks.length) fillBackground(next, thread, tasks);
-    else fillWaiting(next, s.thinking ? '正在思考' : '等待回复');
+    else fillWaiting(next, isThinking(s) ? '正在思考' : '等待回复');
     state.thinkingNode = next;
     if (!fresh) return;
     thread.el.append(next);
@@ -3639,7 +3678,8 @@ async function onUpdate(body) {
         s.seq = Math.max(s.seq ?? 0, body.message?.seq ?? 0);
         sessionChanged(s);
         const counted = linesTracked(s);
-        const raw = counted || state.threads.has(s.id) ? await decryptMessage(s, body.message) : null;
+        const raw = await decryptMessage(s, body.message);
+        trackActivity(s, raw, body.message?.seq, body.message?.createdAt);
         if (counted) pushLines(s, body.message, raw);
         if (usagePageOpen()) pushUsage(s);
         await acceptMessage(s, body.message, raw);
@@ -3683,18 +3723,14 @@ function onEphemeral(e) {
     const s = state.sessions.get(e.id);
     if (!s) return;
     const changed = s.active !== e.active;
-    s.active = e.active;
-    s.activeAt = e.activeAt ?? s.activeAt;
-    const stale = e.thinking && Date.now() < (s.thinkingMutedUntil ?? 0); // the keepalive that lags a turn's end
-    const thinking = !!e.thinking && e.active && !stale;
-    if (thinking !== !!s.thinking) sessionChanged(s);
-    s.thinking = thinking;
+    const before = isThinking(s);
+    setActivity(s, e);
+    if (before !== isThinking(s)) sessionChanged(s);
     const thread = state.threads.get(s.id);
     if (changed && !s.active) thread?.background?.clear(); // its process is gone, and the tasks with it
     renderList(); // rebuilds only if what shows changed (a finished turn may now be unread)
-    const r = $('list').querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
-    if (r) { r.classList.toggle('busy', isWorking(s)); r.title = rowStatus(s); }
-    if (changed && thread?.newest) refreshTurn(thread, thread.newest);
+    refreshActivityRow(s);
+    if ((changed || before !== isThinking(s)) && thread?.newest) refreshTurn(thread, thread.newest);
     if (s === state.current) { if (changed) renderHead(); renderThinking(); }
 }
 
