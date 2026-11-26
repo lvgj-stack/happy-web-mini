@@ -84,6 +84,13 @@ test('every palette gives every color the page reads', () => {
     }
 });
 
+test('the dark night lightens the changed-lines colors so they read on it', () => {
+    const { vars } = paletteFor('wild', 'night');
+    assert.equal(vars['--add'], '#7FC08E');
+    assert.equal(vars['--del'], '#E8806F');
+    assert.equal(paletteFor('wild', 'day').vars['--add'], undefined, 'light looks keep the stylesheet colors');
+});
+
 test('an unknown skin reads as the current look', () => {
     assert.deepEqual(paletteFor('nope', 'day'), { vars: {}, dark: false });
 });

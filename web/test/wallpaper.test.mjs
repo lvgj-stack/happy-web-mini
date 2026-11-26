@@ -80,3 +80,11 @@ test('only image data URLs are taken', () => {
     assert.throws(() => setWallpaperImage(memory(), 'javascript:alert(1)'));
     assert.throws(() => setWallpaperImage(memory(), 'data:image/svg+xml;base64,AAAA'));
 });
+
+test('a picture under a dark skin is veiled in that skin\'s colors', () => {
+    const w = { kind: 'image', color: '', fade: 0.6, image: IMG };
+    const dark = wallpaperStyle(w, { sheet: '20, 28, 37', paper: '28, 37, 48' });
+    assert.equal(dark.main.backgroundColor, 'rgba(20, 28, 37, 0.6)');
+    assert.equal(dark.side.backgroundColor, 'rgba(28, 37, 48, 0.75)');
+    assert.deepEqual(wallpaperStyle(w), wallpaperStyle(w, { sheet: '252, 252, 250', paper: '242, 243, 239' }), 'no veil given: the light page colors');
+});

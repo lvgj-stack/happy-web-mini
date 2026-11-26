@@ -15,6 +15,7 @@ function palette(p) {
         '--ink-rgb': p.inkRgb, '--head': p.head, '--head-hover': p.headHover, '--code-bg': p.code,
         '--accent-hover': p.accentHover, '--idle': p.idle, '--faint': p.faint,
         '--glass': p.glass, '--sel': p.sel, '--ring': p.ring, '--menu': p.menu,
+        ...p.extra,
     };
 }
 
@@ -42,6 +43,7 @@ const WILD = {
         amber: '#E86A50', surface: '#1B2530', inkRgb: '228, 232, 218', head: '#24303C', headHover: '#2A3744', code: '#18212B',
         accentHover: '#F0A85A', idle: '#4E5A63', faint: '#66727A',
         glass: 'rgba(28, 37, 48, .6)', sel: 'rgba(232, 154, 69, .22)', ring: 'rgba(232, 154, 69, .45)', menu: 'rgba(28, 37, 48, .82)',
+        extra: { '--add': '#7FC08E', '--del': '#E8806F' },
     }),
 };
 

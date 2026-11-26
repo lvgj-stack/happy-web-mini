@@ -65,15 +65,16 @@ const veil = (rgb, alpha) => ({ ...NONE, backgroundColor: `rgba(${rgb}, ${alpha}
  * Inline styles for the window (#app), the sidebar and the chat area; empty
  * strings put the stylesheet's look back. A color tints the chat area alone;
  * a picture spans the whole window, under the page color in the chat area and
- * a denser sidebar color, so the two still read apart.
+ * a denser sidebar color, so the two still read apart. `colors` are the
+ * skin's page and sidebar colors as "r, g, b", so a dark skin veils in dark.
  */
-export function wallpaperStyle(w) {
+export function wallpaperStyle(w, colors = { sheet: VEIL, paper: SIDE_VEIL }) {
     if (w.kind === 'color') return { app: NONE, side: NONE, main: { ...NONE, backgroundColor: w.color } };
     if (w.kind === 'image') {
         return {
             app: { ...NONE, backgroundImage: `url("${w.image}")`, backgroundSize: 'cover', backgroundPosition: 'center' },
-            side: veil(SIDE_VEIL, sideFade(w.fade)),
-            main: veil(VEIL, w.fade),
+            side: veil(colors.paper, sideFade(w.fade)),
+            main: veil(colors.sheet, w.fade),
         };
     }
     return { app: NONE, side: NONE, main: NONE };
