@@ -514,12 +514,15 @@ function refreshActivityRow(s) {
     effects.wake();
 }
 
-/** Track decrypted turn evidence even before this session's thread has been opened. */
-function trackActivity(s, raw, seq, sentAt) {
+/**
+ * Track decrypted turn evidence even before this session's thread has been opened.
+ * `live`: a message pushed just now; a page of history celebrates once for the whole page (decodePage).
+ */
+function trackActivity(s, raw, seq, sentAt, live = true) {
     const before = isThinking(s);
     noteTurnActivity(s, raw, seq, Date.now(), sentAt);
     if (before === isThinking(s)) return;
-    if (before) celebrateDone(s);
+    if (before && live) celebrateDone(s);
     sessionChanged(s);
     renderList();
     refreshActivityRow(s);
@@ -1932,7 +1935,11 @@ async function decodePage(s, messages) {
         const raw = await decryptMessage(s, m);
         return { m, raw, view: decoded(raw, m) };
     }));
-    for (const { m, raw } of rows) trackActivity(s, raw, m.seq, m.createdAt);
+    // A page replays turns that started and ended long ago: only a session that was working
+    // before the page and is not after it has just finished (opening an idle chat is not news).
+    const was = isThinking(s);
+    for (const { m, raw } of rows) trackActivity(s, raw, m.seq, m.createdAt, false);
+    if (was && !isThinking(s)) celebrateDone(s);
     return rows;
 }
 
@@ -3406,7 +3413,7 @@ function applyWallpaper() {
     // A picture is veiled in the skin's own page colors, so a dark skin stays dark over it.
     const css = getComputedStyle(document.body);
     const sheet = hexRgb(css.getPropertyValue('--sheet')), paper = hexRgb(css.getPropertyValue('--paper'));
-    const style = wallpaperStyle(w, sheet && paper ? { sheet, paper } : undefined);
+    const style = wallpaperStyle(w, sheet && paper ? { sheet, paper, dark: document.body.classList.contains('dark') } : undefined);
     Object.assign($('app').style, style.app);
     $('app').classList.toggle('wallpapered', w.kind === 'image');
     Object.assign(document.querySelector('aside').style, style.side);
@@ -3508,6 +3515,7 @@ function applySkin() {
     state.skinTime = time;
     document.body.dataset.skin = id;
     document.body.dataset.time = time;
+    document.body.dataset.motion = motion;
     document.body.classList.toggle('dark', dark);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--paper').trim() || '#F2F3EF');
     applyWallpaper();

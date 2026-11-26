@@ -156,21 +156,28 @@ export function createEffects({ main }) {
     const trails = new Map();     // fairy trails by row id
 
     function fit() {
-        dpr = Math.min(2, window.devicePixelRatio || 1);
+        // The window can move to a screen with another pixel ratio without resizing: reallocate then too.
+        const ratio = Math.min(2, window.devicePixelRatio || 1);
+        const moved = ratio !== dpr;
+        dpr = ratio;
         const r = main.getBoundingClientRect();
-        if (Math.round(r.width) !== MW || Math.round(r.height) !== MH) {
+        if (moved || Math.round(r.width) !== MW || Math.round(r.height) !== MH) {
             MW = Math.round(r.width); MH = Math.round(r.height);
             amb.width = MW * dpr; amb.height = MH * dpr;
             seed();
         }
-        if (window.innerWidth !== W || window.innerHeight !== H) {
+        if (moved || window.innerWidth !== W || window.innerHeight !== H) {
             W = window.innerWidth; H = window.innerHeight;
             fx.width = W * dpr; fx.height = H * dpr;
         }
     }
 
     const ambientOn = () => motion === 'full' && skin !== 'moss' && MW > 0 && MH > 0;
-    const waitingRows = () => (motion === 'off' || skin !== 'wild' ? [] : [...document.querySelectorAll('#list .row.asking')]);
+    /** Waiting rows the sprite can circle: on screen only, so a hidden sidebar (a phone in a chat) does not keep the loop running. */
+    const waitingRows = () => (motion === 'off' || skin !== 'wild' ? [] : [...document.querySelectorAll('#list .row.asking')].filter((row) => {
+        const r = row.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
+    }));
 
     function wake() {
         if (raf || document.hidden) return;

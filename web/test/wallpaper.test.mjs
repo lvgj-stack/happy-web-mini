@@ -88,3 +88,9 @@ test('a picture under a dark skin is veiled in that skin\'s colors', () => {
     assert.equal(dark.side.backgroundColor, 'rgba(28, 37, 48, 0.75)');
     assert.deepEqual(wallpaperStyle(w), wallpaperStyle(w, { sheet: '252, 252, 250', paper: '242, 243, 239' }), 'no veil given: the light page colors');
 });
+
+test('a light color picked by day gives way to a dark skin, and comes back after it', () => {
+    const w = { kind: 'color', color: '#F6F1E6', fade: 0.6, image: '' };
+    assert.equal(wallpaperStyle(w, { sheet: '20, 28, 37', paper: '28, 37, 48', dark: true }).main.backgroundColor, '');
+    assert.equal(wallpaperStyle(w, { sheet: '246, 244, 233', paper: '230, 235, 214', dark: false }).main.backgroundColor, '#F6F1E6');
+});
