@@ -3531,7 +3531,8 @@ function applySkin() {
  * or the send button when it is the open chat and its row is out of sight.
  */
 function celebrateDone(s) {
-    if (waitingSets(s).length) return;
+    // Waiting has its own look; a session that went offline (machine asleep, CLI gone) did not finish anything.
+    if (waitingSets(s).length || !s.active) return;
     const at = Date.now();
     if (at - (state.doneShown.get(s.id) ?? 0) < 3000) return;
     state.doneShown.set(s.id, at);
@@ -3562,9 +3563,11 @@ function renderSkinSetting() {
 
 const STICKER_NAMES = { fall: '飘落物', done: '干完了', ask: '等你回答' };
 
-/** Hand the stickers kept in this browser to effects.js, as loaded images. */
+/** Hand the stickers kept in this browser to effects.js, as loaded images. Only the latest call's result is used. */
 async function applyStickers() {
+    const turn = state.stickerTurn = (state.stickerTurn ?? 0) + 1;
     const kept = readStickers(localStorage);
+    document.body.classList.toggle('ask-sticker', !!kept.ask);
     const load = (src) => (src ? new Promise((done) => {
         const img = new Image();
         img.onload = () => done(img);
@@ -3572,6 +3575,8 @@ async function applyStickers() {
         img.src = src;
     }) : null);
     const [fall, doneImg, ask] = await Promise.all(SLOTS.map((slot) => load(kept[slot])));
+    if (turn !== state.stickerTurn) return; // a newer change (say a × right after picking) already went through
+    document.body.classList.toggle('ask-sticker', !!ask);
     effects.setStickers({ fall, done: doneImg, ask });
 }
 
@@ -5008,7 +5013,8 @@ $('notify-sound').addEventListener('change', () => {
 applyBrand();
 const effects = createEffects({ main: document.querySelector('main') });
 // A click on an empty spot of the chat (not on a message, control or page) gets the skin's small surprise.
-document.querySelector('main').addEventListener('pointerdown', (e) => {
+// 'click', not 'pointerdown': a touch that starts a scroll on an empty spot is not a click.
+document.querySelector('main').addEventListener('click', (e) => {
     if (e.button !== 0 || e.target.closest('button, a, input, textarea, select, label, .msg, .turn, #composer, #chat-head, #links, #ask, #readonly, #settings-page, #usage-page')) return;
     effects.click(e.clientX, e.clientY);
 });
@@ -5017,6 +5023,8 @@ applyStickers();
 $('sticker-file').onchange = () => { pickStickerFile($('sticker-file').files[0]); $('sticker-file').value = ''; };
 // 旷野 follows the clock: look again every minute, and re-apply only when the time of day turns.
 setInterval(() => { if (timeOfDay(new Date()) !== state.skinTime) applySkin(); }, 60_000);
+// Reduce motion switched on or off in the system: the default motion follows at once (a motion picked by hand stays).
+window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => { applySkin(); if (document.body.classList.contains('in-settings')) renderSkinSetting(); });
 for (const radio of document.querySelectorAll('input[name="skin-motion"]')) {
     radio.addEventListener('change', () => { setMotion(localStorage, radio.value); applySkin(); settingsSaved(); });
 }

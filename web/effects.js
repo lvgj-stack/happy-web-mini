@@ -328,7 +328,8 @@ export function createEffects({ main }) {
     }
 
     function bubble(bottom) { return { x: rnd(0, MW), y: bottom ? MH + rnd(5, 40) : rnd(0, MH), r: rnd(1.5, 5), vy: rnd(-14, -36), ph: rnd(0, 6.3) }; }
-    function cloud(x, y) { return { x, y: y + rnd(-10, 10), sp: rnd(5, 12), b: pick([4, 5, 6]) }; }
+    /** A pixel cloud on its own lane: `lane` stays put, each lap only varies around it. */
+    function cloud(x, lane) { return { x, lane, y: lane + rnd(-10, 10), sp: rnd(5, 12), b: pick([4, 5, 6]) }; }
     function sprite(top) { return { x: rnd(0, MW), y: top ? -20 : rnd(0, MH), vy: rnd(14, 30), ph: rnd(0, 6.3), rot: rnd(-.6, .6), vr: rnd(-.8, .8), s: rnd(16, 24) }; }
 
     function sea(c, dt, t) {
@@ -363,7 +364,7 @@ export function createEffects({ main }) {
         if (stickers.fall) return;
         for (const k of scene.clouds ?? []) {
             k.x += k.sp * dt;
-            if (k.x > MW + 10) Object.assign(k, cloud(-k.b * 10, k.y));
+            if (k.x > MW + 10) Object.assign(k, cloud(-k.b * 10, k.lane));
             const x0 = Math.round(k.x / k.b) * k.b, y0 = Math.round(k.y / k.b) * k.b;
             // a blocky drop shadow first, so a white cloud reads on the pale sky
             for (const [col, off] of [['rgba(110, 150, 180, .35)', k.b], ['#FFFFFF', 0]]) {
@@ -530,10 +531,10 @@ export function createEffects({ main }) {
         c.ellipse(x - 3.5 * f, y - 2.5, 3.5 * f, 2, -.5, 0, 7); c.ellipse(x + 3.5 * f, y - 2.5, 3.5 * f, 2, .5, 0, 7); c.fill();
     }
 
-    /** Your own mark beside a waiting row, bobbing at its right end. */
+    /** Your own mark on a waiting row, bobbing where its state icon is (the stylesheet hides that icon: body.ask-sticker). */
     function askSticker(c, row) {
-        const r = row.getBoundingClientRect();
-        drawSprite(c, stickers.ask, r.right - 14, r.top + r.height / 2 + Math.sin(now * 4) * 3, 20, Math.sin(now * 3) * .15, 1);
+        const at = (row.querySelector('.status') ?? row).getBoundingClientRect();
+        drawSprite(c, stickers.ask, at.left + at.width / 2, at.top + at.height / 2 + Math.sin(now * 4) * 2, 18, Math.sin(now * 3) * .15, 1);
     }
 
     const SCENES = { sakura, wild, sea, star, pixel };

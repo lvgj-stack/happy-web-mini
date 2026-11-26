@@ -21,6 +21,7 @@
     /* Every other color a skin may change (skins.js sets these on <body>); the defaults are 苔绿 */
     --surface: #fff;            /* fields, menus, the composer */
     --ink-rgb: 38, 42, 39;      /* hover and selection tints: rgba(var(--ink-rgb), a) */
+    --shadow-rgb: 38, 42, 39;   /* shadows and dialog dimming: black on a dark look */
     --head: #E9EBE5;            /* a computer card's title strip */
     --head-hover: #E3E6DF;
     --amber: #B7791F;           /* waiting for you */
@@ -298,7 +299,7 @@
   .row.menu-open, .tree-head.menu-open, .machine.archived .group-head.menu-open { background: rgba(var(--ink-rgb), .06); }
   .group-head.menu-open { background: var(--head-hover); }
   .row.selected.menu-open { background: var(--moss-tint); }
-  .ctx-menu { position: fixed; z-index: 50; min-width: 180px; max-width: 280px; padding: 4px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(var(--ink-rgb), .12); font-size: 13px; line-height: 1.5; }
+  .ctx-menu { position: fixed; z-index: 50; min-width: 180px; max-width: 280px; padding: 4px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(var(--shadow-rgb, 38, 42, 39), .12); font-size: 13px; line-height: 1.5; }
   .ctx-menu:focus { outline: none; }
   .ctx-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 5px 10px; border-radius: 5px; white-space: nowrap; }
   .ctx-item svg, .ctx-item .ctx-pad { flex: none; width: 15px; height: 15px; color: var(--muted); }
@@ -341,7 +342,7 @@
   #links { display: none; font-size: 13px; line-height: 1.5; -webkit-app-region: no-drag; }
   #links-toggle { margin-top: 6px; flex: none; }
   /* narrow, or put away: a popover under the toggle (placed by script) */
-  #links.open:not([hidden]) { display: block; position: absolute; z-index: 20; width: min(320px, calc(100% - 16px)); max-height: 60vh; overflow: hidden auto; padding: 8px 6px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(var(--ink-rgb), .12); }
+  #links.open:not([hidden]) { display: block; position: absolute; z-index: 20; width: min(320px, calc(100% - 16px)); max-height: 60vh; overflow: hidden auto; padding: 8px 6px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(var(--shadow-rgb, 38, 42, 39), .12); }
   /* With the panel docked (from 1168px: 860 + 308), the column is centred in the room left of it: the panel is 260px wide, 24px from the edge. */
   @container (min-width: 1168px) {
     body:not(.links-hidden):not(.in-settings):not(.in-usage) main:has(> #links:not([hidden])) .column { --col-left: max(0px, (100cqw - 284px - 860px) / 2); margin-left: var(--col-left); margin-right: auto; }
@@ -463,9 +464,9 @@
   .tool-row.subagent .sub-chev { flex: none; width: 6px; height: 6px; margin: 0 4px 0 -2px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
   .tool-row.subagent .tool-line:hover .sub-chev { border-color: var(--ink); }
   /* The panel: a sheet from the right, the whole window when narrow */
-  #subagent { margin: 0 0 0 auto; width: min(600px, 100vw); height: 100%; max-height: none; max-width: none; border: 0; padding: 0; color: var(--ink); background: var(--sheet); box-shadow: -8px 0 40px rgba(var(--ink-rgb), .16); }
+  #subagent { margin: 0 0 0 auto; width: min(600px, 100vw); height: 100%; max-height: none; max-width: none; border: 0; padding: 0; color: var(--ink); background: var(--sheet); box-shadow: -8px 0 40px rgba(var(--shadow-rgb, 38, 42, 39), .16); }
   #subagent[open] { display: flex; flex-direction: column; animation: sheet-in .18s ease-out; }
-  #subagent::backdrop { background: rgba(var(--ink-rgb), .2); }
+  #subagent::backdrop { background: rgba(var(--shadow-rgb, 38, 42, 39), .2); }
   @keyframes sheet-in { from { transform: translateX(24px); opacity: .6; } }
   .sub-head { display: flex; align-items: flex-start; gap: 12px; padding: 22px 20px 14px 24px; border-bottom: 1px solid var(--rule); }
   body.desktop-mac .sub-head { padding-top: 36px; }
@@ -619,7 +620,7 @@
 
   /* Slash command suggestions */
   #composer { position: relative; }
-  #slash { position: absolute; left: 32px; right: 32px; bottom: calc(100% - 4px); max-height: 280px; overflow-y: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 6px 24px rgba(var(--ink-rgb), .08); padding: 4px; z-index: 5; }
+  #slash { position: absolute; left: 32px; right: 32px; bottom: calc(100% - 4px); max-height: 280px; overflow-y: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 6px 24px rgba(var(--shadow-rgb, 38, 42, 39), .08); padding: 4px; z-index: 5; }
   .slash-item { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; padding: 5px 10px; border-radius: 6px; }
   .slash-item[aria-selected="true"] { background: var(--moss-tint); }
   .slash-item .cmd { flex: none; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
@@ -628,8 +629,8 @@
 
   /* New session, archive, delete dialogs */
   #new-open { color: var(--moss); }
-  #new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog { border: 0; border-radius: 12px; padding: 24px 24px 20px; width: min(440px, calc(100vw - 32px)); color: var(--ink); background: var(--sheet); box-shadow: 0 12px 48px rgba(var(--ink-rgb), .18); }
-  #new-session::backdrop, #archive-dialog::backdrop, #delete-dialog::backdrop, #batch-delete-dialog::backdrop { background: rgba(var(--ink-rgb), .25); }
+  #new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog { border: 0; border-radius: 12px; padding: 24px 24px 20px; width: min(440px, calc(100vw - 32px)); color: var(--ink); background: var(--sheet); box-shadow: 0 12px 48px rgba(var(--shadow-rgb, 38, 42, 39), .18); }
+  #new-session::backdrop, #archive-dialog::backdrop, #delete-dialog::backdrop, #batch-delete-dialog::backdrop { background: rgba(var(--shadow-rgb, 38, 42, 39), .25); }
   #new-session h2, #archive-dialog h2, #delete-dialog h2, #batch-delete-dialog h2 { font: 400 20px/1.4 var(--serif); margin: 0 0 16px; }
   #new-session label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
   #new-session select.field { appearance: auto; }
@@ -836,7 +837,7 @@
 
   /* ⌘F in the Mac app (find.js); a browser uses its own find bar */
   #find-bar { position: fixed; top: 10px; right: 16px; z-index: 150; display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 10px;
-    background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 6px 24px rgba(var(--ink-rgb), .12); }
+    background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 6px 24px rgba(var(--shadow-rgb, 38, 42, 39), .12); }
   body.desktop-mac #find-bar { top: 44px; }
   #find-input { width: 200px; border: 0; outline: 0; background: none; font: 13px/1.6 var(--sans); color: var(--ink); }
   #find-count { min-width: 3.5em; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
@@ -901,12 +902,23 @@
   body[data-skin="pixel"] :is(#composer .box, .msg.user) { border: 2px solid var(--ink); border-radius: 0; box-shadow: 3px 3px 0 var(--ink); }
   body[data-skin="pixel"] #composer .box:focus-within { border-color: var(--moss); box-shadow: 3px 3px 0 var(--moss); }
   body[data-skin="pixel"] .round { border-radius: 0; box-shadow: 2px 2px 0 var(--ink); }
+  body[data-skin="pixel"] .msg.user[data-time]::after { margin-top: 7px; }
+  body[data-skin="pixel"] .msg.user[data-time] { margin-bottom: 34px; }
+  /* A waiting-for-you sticker (effects.js draws it on the state icon's spot) stands in for the skin's mark */
+  body.ask-sticker .row.asking .status > svg { visibility: hidden; }
+  body.ask-sticker .row.asking .status::before, body.ask-sticker .row.asking .status::after { display: none; }
   /* 旷野 thinking: three rune stones light up one by one after 正在思考 (shapes every font has) */
   body[data-skin="wild"] .msg.thinking-now:not(.background) .label::after { content: ""; margin-left: 8px; letter-spacing: 2px; font-size: .8em; color: var(--moss);
     text-shadow: 0 0 6px color-mix(in srgb, var(--moss) 70%, transparent); animation: runes 1.8s steps(1) infinite; }
   @keyframes runes { 0% { content: "◇◇◇"; } 25% { content: "◆◇◇"; } 50% { content: "◆◆◇"; } 75% { content: "◆◆◆"; } }
 
-  body.dark { color-scheme: dark; }
+  body.dark { color-scheme: dark; --shadow-rgb: 0, 0, 0; }
+  body.dark :is(#subagent, #new-session, #archive-dialog, #delete-dialog, #batch-delete-dialog)::backdrop { background: rgba(0, 0, 0, .45); }
+  body.dark .thumb .remove { background: rgba(0, 0, 0, .65); }
+  /* The Mac pop-up's accent square is a picture in 苔绿 green; other skins draw it in their accent (square corners) */
+  body.desktop-mac[data-skin]:not([data-skin="moss"]) :is(select.field, #new-session select.field) {
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M5 6.5 8 4l3 2.5M5 9.5 8 12l3-2.5' fill='none' stroke='%23fff' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 5px center / 16px,
+      linear-gradient(var(--moss), var(--moss)) no-repeat right 5px center / 16px 16px, var(--surface); }
   body.dark .stop.round { color: var(--sheet); }
   body.dark .stop.round:hover:not(:disabled) { background: #fff; }
   body.dark .row .agent-icon[data-agent="cursor"] { color: var(--ink); }

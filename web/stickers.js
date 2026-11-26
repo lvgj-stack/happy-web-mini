@@ -46,7 +46,9 @@ export async function prepareSticker(file) {
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(bitmap.width * scale));
         canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high'; // a photo shrunk to 128px in one step otherwise comes out jagged
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
         return canvas.toDataURL('image/png'); // keeps transparency
     } finally {
         bitmap.close();

@@ -48,7 +48,7 @@
 - 配色在 `skins.js`：苔绿不设任何变量，用样式表自己的颜色；其他皮肤由 `applySkin()` 把变量写到 `body` 的行内样式上，
   所以也盖得过 `body.desktop-mac` 里的 `--glass` 这些。换皮肤时先删掉上次写过、这次没有的键（`state.skinKeys`）。
 - 样式表里别再写死颜色：白色表面用 `--surface`，悬停 / 选中的淡色用 `rgba(var(--ink-rgb), a)`，等你回答用 `--amber`，
-  其余见 `:root` 的注释。苔绿的默认值就是原来的颜色。深色皮肤时 `body` 有 `.dark`，github-markdown-css 和 highlight.js
+  阴影和对话框背后的遮罩用 `rgba(var(--shadow-rgb, 38, 42, 39), a)`（深色时是黑色；`::backdrop` 在旧浏览器里不继承变量，所以带默认值），其余见 `:root` 的注释。苔绿的默认值就是原来的颜色。深色皮肤时 `body` 有 `.dark`，github-markdown-css 和 highlight.js
   github 主题里写死的浅色在 `body.dark` 下覆盖。
 - 旷野按 `timeOfDay()` 分白天 / 黄昏 / 夜里，每分钟看一次，时段变了才重新应用；夜里是深色，Mac 应用用
   `desktop.setAppearance(dark)` 让毛玻璃跟着变深。设了背景图片时，遮罩用当前皮肤的 `--sheet` / `--paper`（`wallpaperStyle` 的第二个参数）。
@@ -56,6 +56,7 @@
   设置页 / 用量页隐藏 `main` 其他子元素的规则要排除 `.fx-ambient`。事件画布 `position: fixed` 盖住窗口。两块都 `pointer-events: none`。
   一个 rAF 循环，`document.hidden` 时不画，氛围关着、没有粒子、也没有等你回答的行时就停；`renderList` 和 `refreshActivityRow` 之后调 `effects.wake()`。
 - 自定义贴图：`stickers.js` 只认 `data:image/png;base64,`、每张不超过 20 万字符，坏的当没有；`applyStickers()` 加载成 `Image` 交给 `effects.setStickers()`。
+  有 `ask` 贴图时 `body` 加 `.ask-sticker`，样式表藏起等待行的状态图标，贴图画在那个位置。
   `fall` 让各场景跳过自己的小飘落物（场景本身照画），苔绿设了 `fall` 也算有氛围；`ask` 让所有皮肤都画等待行（`waitingRows()` 只算看得见的行）。
 - 场景出错（`seed` 或绘制抛异常）只打一次日志、清空这个场景，不能让动画循环停掉，否则事件动效也跟着没了。
 - 「干完了」= `isThinking` 由真变假（`trackActivity`、`onEphemeral` 两处），见 `celebrateDone`。侧栏状态图标按皮肤换是纯 CSS：
