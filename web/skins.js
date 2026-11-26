@@ -2,7 +2,7 @@
 // per browser. 苔绿 is the stylesheet's own look and sets no colors; the others
 // override the CSS variables on <body> (app.js), so they also beat the Mac
 // app's variables under body.desktop-mac. 旷野 follows the clock: day, dusk
-// and a dark night.
+// and a dark night; 深海 and 星夜 are dark all the time.
 
 const KEY = 'happy.skin';
 const MOTIONS = ['full', 'events', 'off'];
@@ -43,15 +43,41 @@ const WILD = {
         amber: '#E86A50', surface: '#1B2530', inkRgb: '228, 232, 218', head: '#24303C', headHover: '#2A3744', code: '#18212B',
         accentHover: '#F0A85A', idle: '#4E5A63', faint: '#66727A',
         glass: 'rgba(28, 37, 48, .6)', sel: 'rgba(232, 154, 69, .22)', ring: 'rgba(232, 154, 69, .45)', menu: 'rgba(28, 37, 48, .82)',
-        extra: { '--add': '#7FC08E', '--del': '#E8806F' },
+        extra: { '--add': '#7FC08E', '--del': '#E8806F', '--on-accent': '#1A1206' },
     }),
 };
+
+const SEA = palette({
+    paper: '#0E2233', sheet: '#0A1A28', ink: '#D6E8F2', muted: '#7FA0B3', rule: '#1C3A50', accent: '#3FD0C9', tint: '#123349',
+    amber: '#F2B35B', surface: '#10293C', inkRgb: '214, 232, 242', head: '#13304A', headHover: '#183A57', code: '#0D2133',
+    accentHover: '#5ADBD5', idle: '#3E5A6E', faint: '#5B7A8E',
+    glass: 'rgba(14, 34, 51, .62)', sel: 'rgba(63, 208, 201, .2)', ring: 'rgba(63, 208, 201, .45)', menu: 'rgba(14, 34, 51, .84)',
+    extra: { '--add': '#6FD39A', '--del': '#F08A7A', '--on-accent': '#062029' },
+});
+
+const STAR = palette({
+    paper: '#1A1836', sheet: '#121029', ink: '#EAE6FF', muted: '#9690C2', rule: '#2B2752', accent: '#9D8CFF', tint: '#252150',
+    amber: '#F5C451', surface: '#1C1940', inkRgb: '234, 230, 255', head: '#221F47', headHover: '#2A2652', code: '#17153A',
+    accentHover: '#B3A6FF', idle: '#4A4578', faint: '#6A6499',
+    glass: 'rgba(26, 24, 54, .6)', sel: 'rgba(157, 140, 255, .22)', ring: 'rgba(157, 140, 255, .45)', menu: 'rgba(26, 24, 54, .84)',
+    extra: { '--add': '#86D9A0', '--del': '#F59A9A', '--on-accent': '#14112E' },
+});
+
+const PIXEL = palette({
+    paper: '#CFE3EF', sheet: '#E4F1F8', ink: '#1E2430', muted: '#586776', rule: '#A9C2D3', accent: '#E8553B', tint: '#FFF3B8',
+    amber: '#B9760A', surface: '#FFFFFF', inkRgb: '30, 36, 48', head: '#BFD7E6', headHover: '#B3CFE0', code: '#EEF6FB',
+    accentHover: '#CF4329', idle: '#8FA6B6', faint: '#7A8E9D',
+    glass: 'rgba(207, 227, 239, .55)', sel: 'rgba(232, 85, 59, .18)', ring: 'rgba(232, 85, 59, .4)', menu: 'rgba(228, 241, 248, .82)',
+});
 
 /** The skins in the order settings shows them; `chip` is the swatch's CSS background. */
 export const SKINS = [
     { id: 'moss', name: '苔绿', chip: 'linear-gradient(135deg, #FCFCFA 50%, #56735C 50%)' },
     { id: 'sakura', name: '樱花', chip: 'linear-gradient(135deg, #FFF8F9 50%, #D35D7C 50%)' },
     { id: 'wild', name: '旷野', chip: 'linear-gradient(135deg, #F6F4E9 33%, #7FA65A 33% 66%, #D9822B 66%)' },
+    { id: 'sea', name: '深海', chip: 'linear-gradient(135deg, #0A1A28 50%, #3FD0C9 50%)' },
+    { id: 'star', name: '星夜', chip: 'linear-gradient(135deg, #121029 50%, #F5C451 50%)' },
+    { id: 'pixel', name: '像素', chip: 'linear-gradient(135deg, #E4F1F8 50%, #E8553B 50%)' },
 ];
 const known = (id) => SKINS.some((k) => k.id === id);
 
@@ -97,6 +123,9 @@ export function timeOfDay(date) {
 /** The CSS variables a skin sets at a time of day, and whether that look is dark. */
 export function paletteFor(id, time) {
     if (id === 'sakura') return { vars: SAKURA, dark: false };
+    if (id === 'sea') return { vars: SEA, dark: true };
+    if (id === 'star') return { vars: STAR, dark: true };
+    if (id === 'pixel') return { vars: PIXEL, dark: false };
     if (id === 'wild') {
         const t = WILD[time] ? time : 'day';
         return { vars: WILD[t], dark: t === 'night' };

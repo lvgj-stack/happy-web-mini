@@ -45,7 +45,7 @@ test('picking a skin keeps the motion, and the other way round', () => {
 });
 
 test('the skins, in order', () => {
-    assert.deepEqual(SKINS.map((k) => k.id), ['moss', 'sakura', 'wild']);
+    assert.deepEqual(SKINS.map((k) => k.id), ['moss', 'sakura', 'wild', 'sea', 'star', 'pixel']);
     for (const k of SKINS) { assert.ok(k.name); assert.ok(k.chip); }
 });
 
@@ -75,7 +75,7 @@ test('only 旷野 changes with the time, and only its night is dark', () => {
 test('every palette gives every color the page reads', () => {
     const KEYS = ['--paper', '--sheet', '--ink', '--muted', '--rule', '--moss', '--moss-tint', '--surface', '--ink-rgb', '--head', '--head-hover',
         '--amber', '--code-bg', '--accent-hover', '--idle', '--faint', '--glass', '--sel', '--ring', '--menu'];
-    for (const id of ['sakura', 'wild']) {
+    for (const id of ['sakura', 'wild', 'sea', 'star', 'pixel']) {
         for (const time of ['day', 'dusk', 'night']) {
             const { vars } = paletteFor(id, time);
             for (const k of KEYS) assert.ok(vars[k], `${id} ${time} sets ${k}`);
@@ -100,4 +100,17 @@ test('hexRgb: a #rrggbb color as "r, g, b" for rgba(), anything else null', () =
     assert.equal(hexRgb(' #fcfcfa '), '252, 252, 250');
     assert.equal(hexRgb('rgb(1, 2, 3)'), null);
     assert.equal(hexRgb(''), null);
+});
+
+test('深海 and 星夜 are dark at any hour, 像素 is light, none of them follows the clock', () => {
+    for (const id of ['sea', 'star']) for (const t of ['day', 'dusk', 'night']) assert.equal(paletteFor(id, t).dark, true, `${id} ${t}`);
+    for (const t of ['day', 'dusk', 'night']) assert.equal(paletteFor('pixel', t).dark, false);
+    assert.deepEqual(paletteFor('sea', 'day'), paletteFor('sea', 'night'));
+    assert.deepEqual(paletteFor('pixel', 'day'), paletteFor('pixel', 'night'));
+});
+
+test('every dark look darkens the text on its accent buttons', () => {
+    for (const [id, t] of [['sea', 'day'], ['star', 'day'], ['wild', 'night']]) {
+        assert.match(paletteFor(id, t).vars['--on-accent'] ?? '', /^#[0-9A-F]{6}$/i, `${id} ${t}`);
+    }
 });
