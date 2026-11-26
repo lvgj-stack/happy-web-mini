@@ -111,8 +111,8 @@
   /* Settings and 用量 pages: take the main area in place of the chat */
   #settings-page, #usage-page { display: none; padding-top: 28px; padding-bottom: 48px; overflow-y: auto; }
   body.in-settings #settings-page, body.in-usage #usage-page { display: block; }
-  body.in-settings main > :not(#settings-page):not(#side-expand) { display: none !important; }
-  body.in-usage main > :not(#usage-page):not(#side-expand) { display: none !important; }
+  body.in-settings main > :not(#settings-page):not(#side-expand):not(.fx-ambient) { display: none !important; }
+  body.in-usage main > :not(#usage-page):not(#side-expand):not(.fx-ambient) { display: none !important; }
   .settings-head { display: flex; align-items: baseline; gap: 14px; }
   .settings-head h2 { font: 400 22px/1.4 var(--serif); margin: 0; }
   #settings-back, #usage-back { display: none; }
@@ -846,6 +846,30 @@
     --accent-active: color-mix(in srgb, var(--accent-hover) 90%, black);
   }
   /* A dark look: what the stylesheets we pull in (github-markdown-css, highlight.js github) draw light */
+  /* effects.js: the ambient scene under main's content (main is its own stacking context), the shows over the window */
+  main { isolation: isolate; }
+  .fx-ambient { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+  .fx-events { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 140; pointer-events: none; }
+  /* The sidebar's state icons per skin: the svg gives way to a drawn one */
+  body[data-skin="sakura"] .row.busy:not(.asking) .status .st-working { display: none; }
+  body[data-skin="sakura"] .row.busy:not(.asking) .status::after { content: "✿"; width: 14px; font-size: 14px; line-height: 14px; text-align: center; color: var(--moss); animation: spin 2.6s linear infinite; }
+  body[data-skin="sakura"] .row.asking .status .st-waiting { transform-origin: 50% 0; animation: bell 1.8s ease-in-out infinite; }
+  @keyframes bell { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
+  body[data-skin="wild"] .row .status { position: relative; }
+  body[data-skin="wild"] .row.busy:not(.asking) .status .st-working, body[data-skin="wild"] .row.asking .status .st-waiting { display: none; }
+  body[data-skin="wild"] .row.busy:not(.asking) .status::before { content: ""; position: absolute; inset: 1.5px; border: 1.3px solid var(--muted); border-radius: 50%; }
+  body[data-skin="wild"] .row.busy:not(.asking) .status::after { content: ""; position: absolute; left: 6px; top: 3px; width: 2px; height: 8px; border-radius: 1px;
+    background: linear-gradient(var(--amber) 50%, var(--muted) 50%); animation: compass 2.2s ease-in-out infinite; }
+  @keyframes compass { 0% { transform: rotate(-30deg); } 35% { transform: rotate(210deg); } 50% { transform: rotate(160deg); } 65% { transform: rotate(185deg); } 100% { transform: rotate(330deg); } }
+  body[data-skin="wild"] .row.asking .status::before { content: ""; position: absolute; left: 3px; top: 1px; width: 1.5px; height: 13px; background: var(--ink); }
+  body[data-skin="wild"] .row.asking .status::after { content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 8px; height: 6.5px; background: var(--amber);
+    clip-path: polygon(0 0, 100% 50%, 0 100%); transform-origin: 0 50%; animation: flag .9s ease-in-out infinite; }
+  @keyframes flag { 0%, 100% { transform: scaleX(1) skewY(0); } 50% { transform: scaleX(.75) skewY(12deg); } }
+  /* 旷野 thinking: three rune stones light up one by one after 正在思考 (shapes every font has) */
+  body[data-skin="wild"] .msg.thinking-now:not(.background) .label::after { content: ""; margin-left: 8px; letter-spacing: 2px; font-size: .8em; color: var(--moss);
+    text-shadow: 0 0 6px color-mix(in srgb, var(--moss) 70%, transparent); animation: runes 1.8s steps(1) infinite; }
+  @keyframes runes { 0% { content: "◇◇◇"; } 25% { content: "◆◇◇"; } 50% { content: "◆◆◇"; } 75% { content: "◆◆◆"; } }
+
   body.dark { color-scheme: dark; }
   body.dark .stop.round { color: var(--sheet); }
   body.dark .stop.round:hover:not(:disabled) { background: #fff; }

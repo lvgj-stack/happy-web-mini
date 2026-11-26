@@ -52,6 +52,11 @@
   github 主题里写死的浅色在 `body.dark` 下覆盖。
 - 旷野按 `timeOfDay()` 分白天 / 黄昏 / 夜里，每分钟看一次，时段变了才重新应用；夜里是深色，Mac 应用用
   `desktop.setAppearance(dark)` 让毛玻璃跟着变深。设了背景图片时，遮罩用当前皮肤的 `--sheet` / `--paper`（`wallpaperStyle` 的第二个参数）。
+- 动效在 `effects.js`：氛围画布是 `main` 的第一个子元素（`z-index: -1`，`main` 有 `isolation: isolate`），所以画在聊天区背景之上、内容之下；
+  设置页 / 用量页隐藏 `main` 其他子元素的规则要排除 `.fx-ambient`。事件画布 `position: fixed` 盖住窗口。两块都 `pointer-events: none`。
+  一个 rAF 循环，`document.hidden` 时不画，氛围关着、没有粒子、也没有等你回答的行时就停；`renderList` 和 `refreshActivityRow` 之后调 `effects.wake()`。
+- 「干完了」= `isThinking` 由真变假（`trackActivity`、`onEphemeral` 两处），见 `celebrateDone`。侧栏状态图标按皮肤换是纯 CSS：
+  藏掉对应的 svg，用 `.status` 的伪元素画。字形只用各平台字体都有的（试过如尼字母，Linux 上没有字体会显示成方框）。
 
 ## 协议要点
 

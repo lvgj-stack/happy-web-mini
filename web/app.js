@@ -41,6 +41,7 @@ import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
 import { SKINS, hexRgb, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from './skins.js';
+import { createEffects } from './effects.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 import {
     archivedBefore, canDeleteSession, clearSessionStorage, deleteSessionsOnServer,
@@ -60,6 +61,7 @@ const state = {
     server: localStorage.getItem('happy.server') || DEFAULT_SERVER,
     token: localStorage.getItem('happy.token'),
     keys: null,
+    doneShown: new Map(), // session id → when its "done" show last played (effects.js)
     sessions: new Map(),     // id -> { id, dataKey, meta, metadataVersion, active, activeAt, updatedAt }
     syncedAt: 0,             // highest server updatedAt seen, for changedSince
     current: null,
@@ -509,6 +511,7 @@ function sessionChanged(s) {
 function refreshActivityRow(s) {
     const r = $('list').querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
     if (r) { r.classList.toggle('busy', isWorking(s)); r.title = rowStatus(s); }
+    effects.wake();
 }
 
 /** Track decrypted turn evidence even before this session's thread has been opened. */
@@ -516,6 +519,7 @@ function trackActivity(s, raw, seq, sentAt) {
     const before = isThinking(s);
     noteTurnActivity(s, raw, seq, Date.now(), sentAt);
     if (before === isThinking(s)) return;
+    if (before) celebrateDone(s);
     sessionChanged(s);
     renderList();
     refreshActivityRow(s);
@@ -631,6 +635,7 @@ function renderList() {
     }
     if (archived.length) list.append(archivedSection(archived, archivedRows));
     list.scrollTop = keepScroll;
+    effects.wake(); // a row may be waiting for you now
 }
 
 /** The computers' keys in the order the list shows them. */
@@ -3035,6 +3040,7 @@ async function send(choice) {
             localId: uuid(),
         });
         await api('POST', `/v3/sessions/${encodeURIComponent(s.id)}/messages`, { messages });
+        effects.send(button);
         if (!picked) {
             state.drafts.delete(s.id);
             // Switched chats while uploading: the box now holds the other chat's draft.
@@ -3492,7 +3498,7 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
  * the stylesheet, .dark for a dark look, and the scene for effects.js.
  */
 function applySkin() {
-    const { id } = readSkin(localStorage, reducedMotion());
+    const { id, motion } = readSkin(localStorage, reducedMotion());
     const time = timeOfDay(new Date());
     const { vars, dark } = paletteFor(id, time);
     const style = document.body.style;
@@ -3506,6 +3512,25 @@ function applySkin() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--paper').trim() || '#F2F3EF');
     applyWallpaper();
     desktop.setAppearance(dark);
+    effects.setSkin(id, motion, time);
+}
+
+/**
+ * A session stopped thinking: its row puts on the skin's "done" show. Not
+ * while it waits for an answer (that has its own look), at most once in 3s
+ * per session (a flapping heartbeat), and only where it can be seen: its row,
+ * or the send button when it is the open chat and its row is out of sight.
+ */
+function celebrateDone(s) {
+    if (waitingSets(s).length) return;
+    const at = Date.now();
+    if (at - (state.doneShown.get(s.id) ?? 0) < 3000) return;
+    state.doneShown.set(s.id, at);
+    const list = $('list');
+    const row = list.querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
+    const r = row?.getBoundingClientRect(), box = list.getBoundingClientRect();
+    if (r && r.height && r.bottom > box.top && r.top < box.bottom) effects.done(row);
+    else if (s === state.current) effects.done($('send'));
 }
 
 /** 皮肤 and 动效 in settings. */
@@ -3774,6 +3799,7 @@ function onEphemeral(e) {
     const before = isThinking(s);
     setActivity(s, e);
     if (before !== isThinking(s)) sessionChanged(s);
+    if (before && !isThinking(s)) celebrateDone(s);
     const thread = state.threads.get(s.id);
     if (changed && !s.active) thread?.background?.clear(); // its process is gone, and the tasks with it
     renderList(); // rebuilds only if what shows changed (a finished turn may now be unread)
@@ -4908,6 +4934,12 @@ $('notify-sound').addEventListener('change', () => {
     settingsSaved();
 });
 applyBrand();
+const effects = createEffects({ main: document.querySelector('main') });
+// A click on an empty spot of the chat (not on a message, control or page) gets the skin's small surprise.
+document.querySelector('main').addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('button, a, input, textarea, select, label, .msg, .turn, #composer, #chat-head, #links, #ask, #readonly, #settings-page, #usage-page')) return;
+    effects.click(e.clientX, e.clientY);
+});
 applySkin(); // applies the wallpaper too, veiled in the skin's colors
 // 旷野 follows the clock: look again every minute, and re-apply only when the time of day turns.
 setInterval(() => { if (timeOfDay(new Date()) !== state.skinTime) applySkin(); }, 60_000);
