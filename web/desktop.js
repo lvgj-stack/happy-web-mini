@@ -14,6 +14,7 @@ export function createDesktop(bridge, notifier = null) {
     let unread = null; // Set of ids last time, null before the first look
     let asking = null;
     let badge = 0;
+    let dark = null; // what the Mac app was last told, null before the first time
 
     function setBadge(n) {
         if (n === badge) return;
@@ -66,6 +67,13 @@ export function createDesktop(bridge, notifier = null) {
             unread = null;
             asking = null;
             setBadge(0);
+        },
+
+        /** A dark skin is on or off: the Mac app darkens its sidebar's vibrancy to match. */
+        setAppearance(on) {
+            if (on === dark || typeof bridge?.setAppearance !== 'function') return;
+            dark = on;
+            bridge.setAppearance(on);
         },
 
         onCommand(fn) { bridge?.onCommand(fn); },

@@ -32,7 +32,7 @@
 - `localStorage` 的键都以 `happy.` 开头。现有的键有：`happy.server`、`happy.token`、`happy.secret`、`happy.seen`、
   `happy.collapsed`、`happy.hostOrder`（电脑的顺序，`{ v: 1, keys: [machineKey…] }`）、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
   `happy.linksHidden`、`happy.linkNames`（右栏链接自定义名称，`{ v: 1, names: { url: label } }`，退出登录时清除）、`happy.links.<会话 id>`、`happy.lines.<会话 id>`、`happy.usage.<会话 id>`（用量页的 token 统计），以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
-  `happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
+  `happy.skin`（皮肤和动效，`{ v: 1, id, motion }`，见 `skins.js`）、`happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
   `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
 - 已读：正在看的会话，标签页可见、不在设置页或用量页（`coveredByPage()`）、并且窗口有焦点（`document.hasFocus()`）才算看过（`viewing()`），网页和 Mac 应用一样；
   窗口重新拿到焦点（`focus`）时补标已读。
@@ -42,6 +42,16 @@
 - 只存在本浏览器里的设置，在 README 里写明「只保存在这个浏览器里」。
 - 侧栏拖动电脑排序用 HTML5 拖放（`dragHost`）。拖动期间 `renderList` 不重建列表（重建会删掉正被拖的标题，拖动就断了），
   松手后再补一次。顺序按 `machineKey` 存，离线的电脑留在存储里不删，上线后回到原位（`hostOrder.js` 的 `moveHost`）。
+
+## 皮肤
+
+- 配色在 `skins.js`：苔绿不设任何变量，用样式表自己的颜色；其他皮肤由 `applySkin()` 把变量写到 `body` 的行内样式上，
+  所以也盖得过 `body.desktop-mac` 里的 `--glass` 这些。换皮肤时先删掉上次写过、这次没有的键（`state.skinKeys`）。
+- 样式表里别再写死颜色：白色表面用 `--surface`，悬停 / 选中的淡色用 `rgba(var(--ink-rgb), a)`，等你回答用 `--amber`，
+  其余见 `:root` 的注释。苔绿的默认值就是原来的颜色。深色皮肤时 `body` 有 `.dark`，github-markdown-css 和 highlight.js
+  github 主题里写死的浅色在 `body.dark` 下覆盖。
+- 旷野按 `timeOfDay()` 分白天 / 黄昏 / 夜里，每分钟看一次，时段变了才重新应用；夜里是深色，Mac 应用用
+  `desktop.setAppearance(dark)` 让毛玻璃跟着变深。设了背景图片时，遮罩用当前皮肤的 `--sheet` / `--paper`（`wallpaperStyle` 的第二个参数）。
 
 ## 协议要点
 

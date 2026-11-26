@@ -40,6 +40,7 @@ import { formatTokens, heatmapWeeks, summarize } from './heatmap.js';
 import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
+import { SKINS, hexRgb, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from './skins.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 import {
     archivedBefore, canDeleteSession, clearSessionStorage, deleteSessionsOnServer,
@@ -3396,7 +3397,10 @@ function applyBrand() {
 /** The window's background, as picked in settings: a color tints the chat area, a picture spans both columns. */
 function applyWallpaper() {
     const w = readWallpaper(localStorage);
-    const style = wallpaperStyle(w);
+    // A picture is veiled in the skin's own page colors, so a dark skin stays dark over it.
+    const css = getComputedStyle(document.body);
+    const sheet = hexRgb(css.getPropertyValue('--sheet')), paper = hexRgb(css.getPropertyValue('--paper'));
+    const style = wallpaperStyle(w, sheet && paper ? { sheet, paper } : undefined);
     Object.assign($('app').style, style.app);
     $('app').classList.toggle('wallpapered', w.kind === 'image');
     Object.assign(document.querySelector('aside').style, style.side);
@@ -3480,6 +3484,48 @@ function renderChatScaleSetting() {
     }));
 }
 
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * The skin picked in settings: its colors on <body> (inline, so they also beat
+ * the Mac app's variables under body.desktop-mac), data-skin / data-time for
+ * the stylesheet, .dark for a dark look, and the scene for effects.js.
+ */
+function applySkin() {
+    const { id } = readSkin(localStorage, reducedMotion());
+    const time = timeOfDay(new Date());
+    const { vars, dark } = paletteFor(id, time);
+    const style = document.body.style;
+    for (const k of state.skinKeys ?? []) if (!(k in vars)) style.removeProperty(k);
+    for (const [k, v] of Object.entries(vars)) style.setProperty(k, v);
+    state.skinKeys = Object.keys(vars);
+    state.skinTime = time;
+    document.body.dataset.skin = id;
+    document.body.dataset.time = time;
+    document.body.classList.toggle('dark', dark);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--paper').trim() || '#F2F3EF');
+    applyWallpaper();
+    desktop.setAppearance(dark);
+}
+
+/** 皮肤 and 动效 in settings. */
+function renderSkinSetting() {
+    const { id, motion } = readSkin(localStorage, reducedMotion());
+    $('skin-swatches').replaceChildren(...SKINS.map((k) => {
+        const b = el('button', 'swatch');
+        b.type = 'button';
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(k.id === id));
+        b.title = k.name;
+        const chip = el('span', 'chip');
+        chip.style.background = k.chip;
+        b.append(chip, el('span', null, k.name));
+        b.onclick = () => { setSkin(localStorage, k.id); applySkin(); renderSkinSetting(); settingsSaved(); };
+        return b;
+    }));
+    for (const radio of document.querySelectorAll('input[name="skin-motion"]')) radio.checked = radio.value === motion;
+}
+
 function wallpaperChanged() {
     $('wallpaper-error').textContent = '';
     applyWallpaper();
@@ -3526,6 +3572,7 @@ function renderSettings() {
     renderAbout();
     if (document.activeElement !== $('brand-input')) $('brand-input').value = localStorage.getItem('happy.brand') || '';
     renderNotifySetting();
+    renderSkinSetting();
     renderWallpaperSetting();
     renderChatScaleSetting();
     const worktreeDefault = readWorktreeDefault(localStorage);
@@ -4861,7 +4908,12 @@ $('notify-sound').addEventListener('change', () => {
     settingsSaved();
 });
 applyBrand();
-applyWallpaper();
+applySkin(); // applies the wallpaper too, veiled in the skin's colors
+// 旷野 follows the clock: look again every minute, and re-apply only when the time of day turns.
+setInterval(() => { if (timeOfDay(new Date()) !== state.skinTime) applySkin(); }, 60_000);
+for (const radio of document.querySelectorAll('input[name="skin-motion"]')) {
+    radio.addEventListener('change', () => { setMotion(localStorage, radio.value); applySkin(); settingsSaved(); });
+}
 applyChatScale();
 document.addEventListener('visibilitychange', () => markRead(state.current));
 window.addEventListener('focus', () => markRead(state.current));

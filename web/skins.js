@@ -103,3 +103,9 @@ export function paletteFor(id, time) {
     }
     return { vars: {}, dark: false };
 }
+
+/** A "#rrggbb" color (as a CSS variable reads back) as "r, g, b" for rgba(); null for anything else. */
+export function hexRgb(color) {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(color).trim());
+    return m ? m.slice(1).map((h) => parseInt(h, 16)).join(', ') : null;
+}

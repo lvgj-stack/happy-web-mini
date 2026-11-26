@@ -1,7 +1,7 @@
 // node --test: skins — what is picked, the time of day, and each skin's colors.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SKINS, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from '../skins.js';
+import { SKINS, hexRgb, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from '../skins.js';
 
 const memory = () => {
     const m = new Map();
@@ -93,4 +93,11 @@ test('the dark night lightens the changed-lines colors so they read on it', () =
 
 test('an unknown skin reads as the current look', () => {
     assert.deepEqual(paletteFor('nope', 'day'), { vars: {}, dark: false });
+});
+
+test('hexRgb: a #rrggbb color as "r, g, b" for rgba(), anything else null', () => {
+    assert.equal(hexRgb('#141C25'), '20, 28, 37');
+    assert.equal(hexRgb(' #fcfcfa '), '252, 252, 250');
+    assert.equal(hexRgb('rgb(1, 2, 3)'), null);
+    assert.equal(hexRgb(''), null);
 });

@@ -12,6 +12,7 @@ const bridge = {
     attention: () => calls.push(['attention']),
     setNotifySound: (on) => calls.push(['sound', on]),
     testNotify: () => calls.push(['test']),
+    setAppearance: (dark) => calls.push(['appearance', dark]),
     onCommand() {}, onOpenSession() {},
 };
 globalThis.window = { happyDesktop: bridge };
@@ -95,4 +96,24 @@ test('Mac app: notifications make a sound by default; the switch silences them a
 test('Mac app: 发送测试通知 in settings asks the app, which explains a dropped one itself', () => {
     assert.equal(testNotification(), 'sent');
     assert.deepEqual(calls, [['test']]);
+});
+
+test('a dark skin tells the Mac app once, and again only when it changes', () => {
+    const d = createDesktop(bridge);
+    d.setAppearance(true);
+    d.setAppearance(true);
+    d.setAppearance(false);
+    assert.deepEqual(calls, [['appearance', true], ['appearance', false]]);
+});
+
+test('the first look tells the Mac app even when it is light', () => {
+    createDesktop(bridge).setAppearance(false);
+    assert.deepEqual(calls, [['appearance', false]]);
+});
+
+test('in a browser, or an older app without it, setting the appearance does nothing', () => {
+    assert.doesNotThrow(() => createDesktop(undefined).setAppearance(true));
+    const old = { ...bridge, setAppearance: undefined };
+    assert.doesNotThrow(() => createDesktop(old).setAppearance(true));
+    assert.deepEqual(calls, []);
 });
