@@ -307,6 +307,8 @@ function bridge() {
     ipcMain.on('desktop:notify', (_e, note) => { showNotification(note); });
     ipcMain.on('desktop:notify-sound', (_e, on) => { notifySilent = !on; });
     ipcMain.on('desktop:test-notify', () => { testNotification(); });
+    // A dark skin (web/skins.js) darkens the sidebar's vibrancy to match; otherwise the app stays light.
+    ipcMain.on('desktop:appearance', (_e, dark) => { nativeTheme.themeSource = dark === true ? 'dark' : 'light'; });
 }
 
 // ---------- Menus ----------
@@ -413,8 +415,8 @@ if (!app.requestSingleInstanceLock()) {
     app.on('window-all-closed', () => { if (!isMac) app.quit(); });
     app.on('web-contents-created', (_e, wc) => browserLikeContents(wc));
     app.whenReady().then(() => {
-        // The page has no dark theme yet: keep the app light, or the sidebar's vibrancy
-        // would turn dark under the page's dark text when the Mac is in dark mode.
+        // Light unless the page's skin is dark (desktop:appearance): following the Mac's own
+        // dark mode would put dark vibrancy under a light skin's dark text.
         nativeTheme.themeSource = 'light';
         // build.mjs records which commit of the page went in; dev runs have none.
         let info = null;

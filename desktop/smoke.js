@@ -3,7 +3,7 @@
 // that the bridge is there, that the asset protocol stays inside the web
 // root, and saves screenshots of the sign-in page and the signed-in layout
 // (with the Mac title-bar class forced on, so it can be checked off a Mac).
-const { app, ipcMain, Menu } = require('electron');
+const { app, ipcMain, Menu, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolveAsset, contextMenuItems, WEB_ROOT } = require('./main.js');
@@ -83,6 +83,13 @@ app.on('browser-window-created', (_e, win) => {
         await wc.executeJavaScript(`window.happyDesktop.testNotify()`);
         await new Promise((r) => setTimeout(r, 200));
         check(got.test === true, 'test notification from settings reaches the app');
+        // A dark skin darkens the vibrancy; back to light when it ends.
+        await wc.executeJavaScript(`window.happyDesktop.setAppearance(true)`);
+        await new Promise((r) => setTimeout(r, 200));
+        const darkSource = nativeTheme.themeSource;
+        await wc.executeJavaScript(`window.happyDesktop.setAppearance(false)`);
+        await new Promise((r) => setTimeout(r, 200));
+        check(darkSource === 'dark' && nativeTheme.themeSource === 'light', 'a dark skin switches the app to dark and back');
 
         // Right-click menu like a browser's; spell check on.
         check(wc.listenerCount('context-menu') > 0, 'right-click menu is wired');
