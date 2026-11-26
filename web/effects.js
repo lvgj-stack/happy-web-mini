@@ -212,11 +212,18 @@ export function createEffects({ main }) {
     }
 
     const ambientOn = () => motion === 'full' && (skin !== 'moss' || !!stickers.fall) && MW > 0 && MH > 0;
-    /** Waiting rows the sprite can circle: on screen only, so a hidden sidebar (a phone in a chat) does not keep the loop running. */
-    const waitingRows = () => (motion === 'off' || (skin !== 'wild' && !stickers.ask) ? [] : [...document.querySelectorAll('#list .row.asking')].filter((row) => {
-        const r = row.getBoundingClientRect();
-        return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
-    }));
+    /** The sidebar list's visible box, which waiting-row drawings stay inside (not over its header or off its scroll). */
+    const listBox = () => document.getElementById('list')?.getBoundingClientRect();
+    /** Waiting rows to draw by: inside the list's visible box only, so a hidden or scrolled-away row neither draws nor keeps the loop running. */
+    const waitingRows = () => {
+        if (motion === 'off' || (skin !== 'wild' && !stickers.ask)) return [];
+        const box = listBox();
+        if (!box?.width || !box.height) return [];
+        return [...document.querySelectorAll('#list .row.asking')].filter((row) => {
+            const r = row.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && r.bottom > box.top && r.top < box.bottom;
+        });
+    };
 
     function wake() {
         if (raf || document.hidden) return;
@@ -239,18 +246,28 @@ export function createEffects({ main }) {
         actx.setTransform(dpr, 0, 0, dpr, 0, 0); actx.clearRect(0, 0, MW, MH);
         // A scene that throws must not take the event shows down with it: log once, draw the rest.
         if (ambientOn()) {
+            actx.save();
             try {
                 SCENES[skin]?.(actx, dt, now);
-                if (stickers.fall) fallingStickers(actx, dt);
             } catch (e) {
+                // drop the broken scene so it does not throw again every frame; the stickers still fall
+                scene = { sprites: scene.sprites };
                 if (!broken) console.error('effects: ambient scene failed', e);
                 broken = true;
             }
+            actx.restore(); // also unwinds a save() the scene left open when it threw
+            if (stickers.fall) fallingStickers(actx, dt);
         }
         fctx.setTransform(dpr, 0, 0, dpr, 0, 0); fctx.clearRect(0, 0, W, H);
         parts = parts.filter((p) => drawParticle(fctx, p, dt));
         const rows = waitingRows();
-        for (const row of rows) (stickers.ask ? askSticker : fairy)(fctx, row);
+        if (rows.length) {
+            // clipped to the list, so a row half under the sidebar's header does not draw over it
+            const box = listBox();
+            fctx.save(); fctx.beginPath(); fctx.rect(box.left, box.top, box.width, box.height); fctx.clip();
+            for (const row of rows) (stickers.ask ? askSticker : fairy)(fctx, row);
+            fctx.restore();
+        }
         if (!rows.length) trails.clear();
         if (ambientOn() || parts.length || rows.length) raf = requestAnimationFrame(frame);
         else clear();
@@ -330,6 +347,7 @@ export function createEffects({ main }) {
     }
 
     function star(c, dt, t) {
+        if (!scene.stars) return;
         c.fillStyle = '#FFF6D8';
         for (const s of scene.stars ?? []) { c.globalAlpha = .15 + .7 * Math.abs(Math.sin(t * s.sp + s.ph)); c.beginPath(); c.arc(s.x, s.y, s.s, 0, 7); c.fill(); }
         c.globalAlpha = 1;
@@ -530,7 +548,7 @@ export function createEffects({ main }) {
             const changed = id !== skin;
             skin = id; motion = m; time = t;
             if (m === 'off') parts = [];
-            if (changed) { parts = []; reseed(); }
+            if (changed) { parts = []; broken = false; reseed(); }
             fit();
             clear();
             wake();

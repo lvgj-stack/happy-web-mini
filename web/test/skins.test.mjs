@@ -114,3 +114,15 @@ test('every dark look darkens the text on its accent buttons', () => {
         assert.match(paletteFor(id, t).vars['--on-accent'] ?? '', /^#[0-9A-F]{6}$/i, `${id} ${t}`);
     }
 });
+
+test('dark looks lighten the error red and the danger tint so warnings read on them', () => {
+    for (const [id, t] of [['sea', 'day'], ['star', 'day'], ['wild', 'night']]) {
+        const { vars } = paletteFor(id, t);
+        assert.equal(vars['--error'], '#F08A7A', `${id} ${t} --error`);
+        assert.match(vars['--danger-tint'] ?? '', /^rgba\(240, 138, 122, \.\d+\)$/, `${id} ${t} --danger-tint`);
+    }
+});
+
+test('像素 darkens its waiting-for-you color enough to read on its pale sidebar', () => {
+    assert.equal(paletteFor('pixel', 'day').vars['--amber'], '#8F5A00');
+});

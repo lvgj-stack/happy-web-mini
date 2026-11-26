@@ -43,7 +43,7 @@ const WILD = {
         amber: '#E86A50', surface: '#1B2530', inkRgb: '228, 232, 218', head: '#24303C', headHover: '#2A3744', code: '#18212B',
         accentHover: '#F0A85A', idle: '#4E5A63', faint: '#66727A',
         glass: 'rgba(28, 37, 48, .6)', sel: 'rgba(232, 154, 69, .22)', ring: 'rgba(232, 154, 69, .45)', menu: 'rgba(28, 37, 48, .82)',
-        extra: { '--add': '#7FC08E', '--del': '#E8806F', '--on-accent': '#1A1206' },
+        extra: { '--add': '#7FC08E', '--del': '#E8806F', '--on-accent': '#1A1206', '--error': '#F08A7A', '--danger-tint': 'rgba(240, 138, 122, .18)' },
     }),
 };
 
@@ -52,7 +52,7 @@ const SEA = palette({
     amber: '#F2B35B', surface: '#10293C', inkRgb: '214, 232, 242', head: '#13304A', headHover: '#183A57', code: '#0D2133',
     accentHover: '#5ADBD5', idle: '#3E5A6E', faint: '#5B7A8E',
     glass: 'rgba(14, 34, 51, .62)', sel: 'rgba(63, 208, 201, .2)', ring: 'rgba(63, 208, 201, .45)', menu: 'rgba(14, 34, 51, .84)',
-    extra: { '--add': '#6FD39A', '--del': '#F08A7A', '--on-accent': '#062029' },
+    extra: { '--add': '#6FD39A', '--del': '#F08A7A', '--on-accent': '#062029', '--error': '#F08A7A', '--danger-tint': 'rgba(240, 138, 122, .18)' },
 });
 
 const STAR = palette({
@@ -60,12 +60,12 @@ const STAR = palette({
     amber: '#F5C451', surface: '#1C1940', inkRgb: '234, 230, 255', head: '#221F47', headHover: '#2A2652', code: '#17153A',
     accentHover: '#B3A6FF', idle: '#4A4578', faint: '#6A6499',
     glass: 'rgba(26, 24, 54, .6)', sel: 'rgba(157, 140, 255, .22)', ring: 'rgba(157, 140, 255, .45)', menu: 'rgba(26, 24, 54, .84)',
-    extra: { '--add': '#86D9A0', '--del': '#F59A9A', '--on-accent': '#14112E' },
+    extra: { '--add': '#86D9A0', '--del': '#F59A9A', '--on-accent': '#14112E', '--error': '#F08A7A', '--danger-tint': 'rgba(240, 138, 122, .18)' },
 });
 
 const PIXEL = palette({
     paper: '#CFE3EF', sheet: '#E4F1F8', ink: '#1E2430', muted: '#586776', rule: '#A9C2D3', accent: '#E8553B', tint: '#FFF3B8',
-    amber: '#B9760A', surface: '#FFFFFF', inkRgb: '30, 36, 48', head: '#BFD7E6', headHover: '#B3CFE0', code: '#EEF6FB',
+    amber: '#8F5A00', surface: '#FFFFFF', inkRgb: '30, 36, 48', head: '#BFD7E6', headHover: '#B3CFE0', code: '#EEF6FB',
     accentHover: '#CF4329', idle: '#8FA6B6', faint: '#7A8E9D',
     glass: 'rgba(207, 227, 239, .55)', sel: 'rgba(232, 85, 59, .18)', ring: 'rgba(232, 85, 59, .4)', menu: 'rgba(228, 241, 248, .82)',
 });

@@ -875,10 +875,10 @@
     clip-path: polygon(0 0, 100% 50%, 0 100%); transform-origin: 0 50%; animation: flag .9s ease-in-out infinite; }
   @keyframes flag { 0%, 100% { transform: scaleX(1) skewY(0); } 50% { transform: scaleX(.75) skewY(12deg); } }
   body[data-skin="sea"] .row .status, body[data-skin="star"] .row .status, body[data-skin="pixel"] .row .status { position: relative; }
-  /* 深海: bubbles rise while working; waiting sends out sonar rings */
+  /* 深海: bubbles rise while working (still bubbles when motion is off); waiting sends out sonar rings */
   body[data-skin="sea"] .row.busy:not(.asking) .status .st-working { display: none; }
   body[data-skin="sea"] .row.busy:not(.asking) .status::before, body[data-skin="sea"] .row.busy:not(.asking) .status::after {
-    content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border: 1.3px solid var(--moss); border-radius: 50%; opacity: 0; animation: bub 1.3s ease-in infinite; }
+    content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border: 1.3px solid var(--moss); border-radius: 50%; opacity: .85; animation: bub 1.3s ease-in infinite; }
   body[data-skin="sea"] .row.busy:not(.asking) .status::after { left: 1px; animation-delay: .65s; }
   @keyframes bub { 0% { transform: translateY(6px) scale(.5); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-7px) scale(1.1); opacity: 0; } }
   body[data-skin="sea"] .row.asking .status::before { content: ""; position: absolute; inset: 2px; border: 1.5px solid var(--amber); border-radius: 50%; animation: sonar 1.8s ease-out infinite; }
