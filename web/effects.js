@@ -13,6 +13,10 @@ const PETALS = ['#F4A7B9', '#F7C5D0', '#EE8FA6', '#FBD9E1', '#F9B3C4'];
 const LEAVES = ['#8DB255', '#B8C95A', '#D9A441', '#7FA65A'];
 const WINGS = ['#F2A03D', '#F7D25C', '#9FC6E8', '#F0F0E8'];
 const GOLD = ['#F7D25C', '#FFF3C4', '#F2A03D'];
+const SEA_GLOW = ['#3FD0C9', '#8FE3F0', '#B4FFF0'];
+const STARLIGHT = ['#F5C451', '#FFF6D8', '#9D8CFF'];
+const CONFETTI = ['#E8553B', '#F2B233', '#3FA66B', '#3B7DD8', '#1E2430'];
+const CLOUD = ['..XXX....', '.XXXXXX..', 'XXXXXXXXX', '.XXXXXXX.'];
 const MAX_PARTICLES = 220;
 
 /** 旷野's sky, ridges and grass for each time of day. */
@@ -101,6 +105,29 @@ function drawChest(c, p, k) {
     c.restore();
 }
 
+/** A shooting star: a bright head and a tail behind it along its motion. */
+function drawStreak(c, x, y, vx, vy, len, col, a) {
+    const v = Math.hypot(vx, vy) || 1, tx = x - vx / v * len, ty = y - vy / v * len;
+    const g = c.createLinearGradient(x, y, tx, ty);
+    g.addColorStop(0, col); g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    c.save(); c.globalAlpha = a; c.strokeStyle = g; c.lineWidth = 2; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(x, y); c.lineTo(tx, ty); c.stroke();
+    c.fillStyle = '#fff'; c.shadowColor = col; c.shadowBlur = 10; c.beginPath(); c.arc(x, y, 2, 0, 7); c.fill(); c.restore();
+}
+
+function drawBubble(c, x, y, r, a) {
+    c.globalAlpha = a * .6; c.strokeStyle = '#8FE3F0'; c.lineWidth = 1; c.beginPath(); c.arc(x, y, r, 0, 7); c.stroke();
+    c.globalAlpha = a * .75; c.fillStyle = '#CFF6FB'; c.beginPath(); c.arc(x - r * .35, y - r * .35, r * .25, 0, 7); c.fill();
+    c.globalAlpha = 1;
+}
+
+/** A sticker of your own, `s` px on its longer edge. */
+function drawSprite(c, img, x, y, s, rot, a) {
+    const ratio = (img.naturalWidth || img.width) / (img.naturalHeight || img.height) || 1;
+    const w = ratio >= 1 ? s : s * ratio, h = ratio >= 1 ? s / ratio : s;
+    c.save(); c.globalAlpha = a; c.translate(x, y); c.rotate(rot); c.drawImage(img, -w / 2, -h / 2, w, h); c.restore();
+}
+
 /** One event particle; returns false once it is gone. */
 function drawParticle(c, p, dt) {
     if (p.delay > 0) { p.delay -= dt; return true; }
@@ -118,6 +145,17 @@ function drawParticle(c, p, dt) {
     case 'chest': drawChest(c, p, k); break;
     case 'butterfly': drawButterfly(c, p, k); break;
     case 'firefly': glowDot(c, p.x + Math.sin(p.life * 2 + p.ph) * 10, p.y, 2.2, '#E2F58A', Math.min(1, (1 - k) * 3) * (.35 + .65 * Math.abs(Math.sin(p.life * 3 + p.ph))), 12); break;
+    case 'bubble': drawBubble(c, p.x + Math.sin(p.life * 12) * 2, p.y, p.r, fade * 1.4); break;
+    case 'glow': glowDot(c, p.x + Math.sin(p.life * 3) * 6, p.y, p.r, p.col, Math.sin(Math.PI * k), 8); break;
+    case 'streak': drawStreak(c, p.x, p.y, p.vx, p.vy, p.len, p.col, Math.min(1, 4 * (1 - k))); break;
+    case 'square': {
+        c.save(); c.globalAlpha = k > .75 ? (1 - k) * 4 : 1; c.fillStyle = p.col;
+        c.translate(Math.round(p.x), Math.round(p.y)); c.rotate(Math.round(p.rot / 1.5708) * 1.5708);
+        c.fillRect(-p.s / 2, -p.s / 2, p.s, p.s); c.restore();
+        break;
+    }
+    case 'text': c.globalAlpha = fade; c.fillStyle = p.col; c.font = 'bold 14px ui-monospace, Menlo, Consolas, monospace'; c.fillText(p.text, Math.round(p.x), Math.round(p.y)); c.globalAlpha = 1; break;
+    case 'sprite': drawSprite(c, p.img, p.x, p.y, p.s, p.rot, fade); break;
     case 'dot': c.globalAlpha = fade; c.fillStyle = p.col; c.beginPath(); c.arc(p.x, p.y, p.r, 0, 7); c.fill(); c.globalAlpha = 1; break;
     case 'ring': {
         const e = 1 - Math.pow(1 - k, 3);
@@ -135,7 +173,7 @@ function drawParticle(c, p, dt) {
  * Starts the effects for the page.
  * @param {{ main: HTMLElement }} opts the chat area; the ambient scene draws behind its content
  * @returns {{ setSkin(id: string, motion: string, time: string): void, send(el: Element): void,
- *   done(el: Element): void, click(x: number, y: number): void, wake(): void }}
+ *   done(el: Element): void, click(x: number, y: number): void, setStickers(s: object): void, wake(): void }}
  */
 export function createEffects({ main }) {
     const amb = document.createElement('canvas');
@@ -150,9 +188,10 @@ export function createEffects({ main }) {
 
     let skin = 'moss', motion = 'full', time = 'day';
     let MW = 0, MH = 0, W = 0, H = 0, dpr = 1;
-    let raf = 0, last = 0, now = 0;
+    let raf = 0, last = 0, now = 0, broken = false;
     let parts = [];               // event particles, in window coordinates
     let scene = {};               // the ambient scene's own state
+    let stickers = { fall: null, done: null, ask: null }; // loaded images of your own, or null
     const trails = new Map();     // fairy trails by row id
 
     function fit() {
@@ -172,9 +211,9 @@ export function createEffects({ main }) {
         }
     }
 
-    const ambientOn = () => motion === 'full' && skin !== 'moss' && MW > 0 && MH > 0;
+    const ambientOn = () => motion === 'full' && (skin !== 'moss' || !!stickers.fall) && MW > 0 && MH > 0;
     /** Waiting rows the sprite can circle: on screen only, so a hidden sidebar (a phone in a chat) does not keep the loop running. */
-    const waitingRows = () => (motion === 'off' || skin !== 'wild' ? [] : [...document.querySelectorAll('#list .row.asking')].filter((row) => {
+    const waitingRows = () => (motion === 'off' || (skin !== 'wild' && !stickers.ask) ? [] : [...document.querySelectorAll('#list .row.asking')].filter((row) => {
         const r = row.getBoundingClientRect();
         return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight;
     }));
@@ -198,11 +237,20 @@ export function createEffects({ main }) {
         last = ts; now += dt;
         fit();
         actx.setTransform(dpr, 0, 0, dpr, 0, 0); actx.clearRect(0, 0, MW, MH);
-        if (ambientOn()) (skin === 'sakura' ? sakura : wild)(actx, dt, now);
+        // A scene that throws must not take the event shows down with it: log once, draw the rest.
+        if (ambientOn()) {
+            try {
+                SCENES[skin]?.(actx, dt, now);
+                if (stickers.fall) fallingStickers(actx, dt);
+            } catch (e) {
+                if (!broken) console.error('effects: ambient scene failed', e);
+                broken = true;
+            }
+        }
         fctx.setTransform(dpr, 0, 0, dpr, 0, 0); fctx.clearRect(0, 0, W, H);
         parts = parts.filter((p) => drawParticle(fctx, p, dt));
         const rows = waitingRows();
-        for (const row of rows) fairy(fctx, row);
+        for (const row of rows) (stickers.ask ? askSticker : fairy)(fctx, row);
         if (!rows.length) trails.clear();
         if (ambientOn() || parts.length || rows.length) raf = requestAnimationFrame(frame);
         else clear();
@@ -239,9 +287,74 @@ export function createEffects({ main }) {
             scene.winds = []; scene.birds = []; scene.gust = 0;
             scene.nextWind = now + 1; scene.nextBirds = now + 3;
         }
+        if (skin === 'sea') scene.bubbles = Array.from({ length: Math.round(Math.min(30, Math.max(12, area / 30000))) }, () => bubble(false));
+        if (skin === 'star') {
+            scene.stars = Array.from({ length: Math.round(Math.min(400, area / 2600)) }, () => ({ x: rnd(0, MW), y: rnd(0, MH), s: rnd(.5, 1.6), sp: rnd(.6, 2.2), ph: rnd(0, 6.3) }));
+            scene.shoots = []; scene.nextShoot = now + 2;
+        }
+        if (skin === 'pixel') {
+            const n = Math.max(3, Math.round(MH / 180));
+            scene.clouds = Array.from({ length: n }, (_, i) => cloud(rnd(-40, MW), 30 + i * (MH - 120) / n));
+        }
+        scene.sprites = Array.from({ length: 9 }, () => sprite(false));
+    }
+
+    function bubble(bottom) { return { x: rnd(0, MW), y: bottom ? MH + rnd(5, 40) : rnd(0, MH), r: rnd(1.5, 5), vy: rnd(-14, -36), ph: rnd(0, 6.3) }; }
+    function cloud(x, y) { return { x, y: y + rnd(-10, 10), sp: rnd(5, 12), b: pick([4, 5, 6]) }; }
+    function sprite(top) { return { x: rnd(0, MW), y: top ? -20 : rnd(0, MH), vy: rnd(14, 30), ph: rnd(0, 6.3), rot: rnd(-.6, .6), vr: rnd(-.8, .8), s: rnd(16, 24) }; }
+
+    function sea(c, dt, t) {
+        for (let i = 0; i < 3; i++) {
+            const x0 = MW * (.12 + .32 * i) + Math.sin(t * .35 + i * 2) * 26;
+            const g = c.createLinearGradient(0, 0, 0, MH);
+            g.addColorStop(0, 'rgba(143, 227, 240, .08)'); g.addColorStop(1, 'rgba(143, 227, 240, 0)');
+            c.fillStyle = g; c.beginPath(); c.moveTo(x0 - 14, 0); c.lineTo(x0 + 26, 0); c.lineTo(x0 + 150, MH); c.lineTo(x0 + 60, MH); c.fill();
+        }
+        if (stickers.fall) return;
+        for (const p of scene.bubbles ?? []) {
+            p.ph += dt * 2; p.y += p.vy * dt; p.x += Math.sin(p.ph) * 10 * dt;
+            if (p.y < -10) Object.assign(p, bubble(true));
+            drawBubble(c, p.x, p.y, p.r, .9);
+        }
+    }
+
+    function star(c, dt, t) {
+        c.fillStyle = '#FFF6D8';
+        for (const s of scene.stars ?? []) { c.globalAlpha = .15 + .7 * Math.abs(Math.sin(t * s.sp + s.ph)); c.beginPath(); c.arc(s.x, s.y, s.s, 0, 7); c.fill(); }
+        c.globalAlpha = 1;
+        if (t > scene.nextShoot) {
+            scene.shoots.push({ x: rnd(MW * .1, MW * .7), y: rnd(-10, MH * .3), vx: rnd(260, 380), vy: rnd(90, 150), life: 0, max: .9 });
+            scene.nextShoot = t + rnd(5, 10);
+        }
+        scene.shoots = scene.shoots.filter((p) => (p.life += dt) < p.max);
+        for (const p of scene.shoots) { p.x += p.vx * dt; p.y += p.vy * dt; drawStreak(c, p.x, p.y, p.vx, p.vy, 60, '#FFF6D8', Math.sin(Math.PI * p.life / p.max)); }
+    }
+
+    function pixel(c, dt) {
+        if (stickers.fall) return;
+        for (const k of scene.clouds ?? []) {
+            k.x += k.sp * dt;
+            if (k.x > MW + 10) Object.assign(k, cloud(-k.b * 10, k.y));
+            const x0 = Math.round(k.x / k.b) * k.b, y0 = Math.round(k.y / k.b) * k.b;
+            // a blocky drop shadow first, so a white cloud reads on the pale sky
+            for (const [col, off] of [['rgba(110, 150, 180, .35)', k.b], ['#FFFFFF', 0]]) {
+                c.fillStyle = col;
+                CLOUD.forEach((row, j) => { for (let i = 0; i < row.length; i++) if (row[i] === 'X') c.fillRect(x0 + i * k.b + off, y0 + j * k.b + off, k.b, k.b); });
+            }
+        }
+    }
+
+    /** Your own sticker drifting down, in place of the skin's own small falling things. */
+    function fallingStickers(c, dt) {
+        for (const p of scene.sprites ?? []) {
+            p.ph += dt * 1.6; p.y += p.vy * dt; p.x += Math.sin(p.ph) * 14 * dt; p.rot += p.vr * dt;
+            if (p.y > MH + 20) Object.assign(p, sprite(true));
+            drawSprite(c, stickers.fall, p.x, p.y, p.s, p.rot, .9);
+        }
     }
 
     function sakura(c, dt) {
+        if (stickers.fall) return;
         for (const p of scene.petals ?? []) {
             p.ph += p.phs * dt; p.x += (p.vx + Math.sin(p.ph) * 16) * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
             if (p.y > MH + 12) Object.assign(p, petal(true));
@@ -317,7 +430,7 @@ export function createEffects({ main }) {
             gust += a * .7;
             drawWind(c, w, a * .7);
         }
-        for (const p of scene.leaves) {
+        for (const p of stickers.fall ? [] : scene.leaves) {
             p.ph += dt * 2; p.x += p.vx * (1 + gust * 1.6) * dt; p.y += Math.sin(p.ph) * 14 * dt; p.rot += p.vr * (1 + gust) * dt;
             if (p.x > MW + 20) Object.assign(p, leaf(true));
             drawLeaf(c, p.x, p.y, p.s, p.rot, Math.sin(p.ph * 1.3), p.col, time === 'night' ? .3 : .8);
@@ -388,6 +501,14 @@ export function createEffects({ main }) {
         c.ellipse(x - 3.5 * f, y - 2.5, 3.5 * f, 2, -.5, 0, 7); c.ellipse(x + 3.5 * f, y - 2.5, 3.5 * f, 2, .5, 0, 7); c.fill();
     }
 
+    /** Your own mark beside a waiting row, bobbing at its right end. */
+    function askSticker(c, row) {
+        const r = row.getBoundingClientRect();
+        drawSprite(c, stickers.ask, r.right - 14, r.top + r.height / 2 + Math.sin(now * 4) * 3, 20, Math.sin(now * 3) * .15, 1);
+    }
+
+    const SCENES = { sakura, wild, sea, star, pixel };
+
     const resize = () => { fit(); wake(); };
     new ResizeObserver(resize).observe(main);
     window.addEventListener('resize', resize);
@@ -414,6 +535,14 @@ export function createEffects({ main }) {
                 const col = (SCENE[time] ?? SCENE.day).wind;
                 for (let i = 0; i < 2; i++) emit({ k: 'wind', x: o.x - 10 - i * 14, y: o.y - 4, vx: -170, vy: -150, len: 70, ph: rnd(0, 6.3), col, max: .7, delay: i * .12 });
                 for (let i = 0; i < 6; i++) { const a = rnd(-2.7, -1.8), v = rnd(110, 200); emit({ k: 'leaf', x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 30, drag: 1.2, vr: rnd(-6, 6), s: rnd(3.5, 5.5), col: pick(LEAVES), max: rnd(1, 1.5) }); }
+            } else if (skin === 'sea') {
+                for (let i = 0; i < 10; i++) emit({ k: 'bubble', x: o.x + rnd(-6, 6), y: o.y - i * 7, vx: rnd(-12, 12), vy: rnd(-90, -150), r: rnd(1.5, 4.5), max: rnd(.8, 1.3) });
+            } else if (skin === 'star') {
+                const T = .45, dx = -rnd(80, 160), dy = -rnd(160, 240);
+                emit({ k: 'streak', x: o.x, y: o.y, vx: dx / T, vy: dy / T, max: T, len: 50, col: '#F5C451' });
+                setTimeout(() => { if (motion !== 'off') { sparks(o.x + dx, o.y + dy, 7, STARLIGHT); wake(); } }, T * 1000);
+            } else if (skin === 'pixel') {
+                for (let i = 0; i < 10; i++) { const a = rnd(-3, -.2), v = rnd(80, 170); emit({ k: 'square', x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 380, s: pick([3, 4, 5]), col: pick(CONFETTI), max: rnd(.6, .9) }); }
             } else {
                 emit({ k: 'ring', x: o.x, y: o.y, r0: 16, r1: 34, col: getComputedStyle(document.body).getPropertyValue('--moss').trim() || '#56735C', max: .6 });
             }
@@ -436,9 +565,21 @@ export function createEffects({ main }) {
                     critters(cx, cy - 10, 1, 3);
                     wake();
                 }, 650);
+            } else if (skin === 'sea') {
+                for (let i = 0; i < 3; i++) emit({ k: 'ring', x: o.r.left + 22, y: o.y, r0: 3, r1: 56, col: '#3FD0C9', max: 1.3, delay: i * .25 });
+                for (let i = 0; i < 14; i++) emit({ k: 'glow', x: o.x + rnd(-40, 60), y: o.y + rnd(-6, 10), vx: rnd(-10, 10), vy: rnd(-25, -60), r: rnd(1.5, 3), col: pick(SEA_GLOW), max: rnd(1.2, 2) });
+            } else if (skin === 'star') {
+                emit({ k: 'streak', x: -20, y: H * .12, vx: W * 1.4, vy: H * .5, max: .85, len: 140, col: '#FFF6D8' });
+                sparks(o.r.left + 22, o.y, 16, STARLIGHT);
+            } else if (skin === 'pixel') {
+                for (let i = 0; i < 34; i++) { const a = rnd(-2.9, -.25), v = rnd(110, 260); emit({ k: 'square', x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 520, vr: rnd(-8, 8), s: pick([3, 4, 5, 6]), col: pick(CONFETTI), max: rnd(1, 1.6) }); }
+                emit({ k: 'text', x: o.r.left + 30, y: o.y - 8, vy: -36, text: '+1', col: '#E8553B', max: 1.1 });
             } else {
                 emit({ k: 'ring', x: o.r.left + 22, y: o.y, r0: 4, r1: 46, col: accent, max: .9 });
                 for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; emit({ k: 'dot', x: o.r.left + 22, y: o.y, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, drag: 3, r: 2, col: accent, max: .7 }); }
+            }
+            if (stickers.done) {
+                for (let i = 0; i < 5; i++) emit({ k: 'sprite', img: stickers.done, x: o.x, y: o.y, vx: rnd(-50, 90), vy: rnd(-120, -200), ay: 160, vr: rnd(-3, 3), s: rnd(18, 26), max: rnd(1.2, 1.8), delay: i * .08 });
             }
             wake();
         },
@@ -451,9 +592,21 @@ export function createEffects({ main }) {
             } else if (skin === 'wild') {
                 scene.gust = 1.4;
                 critters(x, y, 3, 6);
+            } else if (skin === 'sea') {
+                for (let i = 0; i < 8; i++) emit({ k: 'bubble', x: x + rnd(-8, 8), y: y + rnd(-4, 4), vx: rnd(-10, 10), vy: rnd(-60, -120), r: rnd(1.5, 4.5), max: rnd(.8, 1.4) });
+            } else if (skin === 'star') {
+                sparks(x, y, 9, STARLIGHT);
+            } else if (skin === 'pixel') {
+                for (let i = 0; i < 12; i++) { const a = rnd(-3, -.2), v = rnd(70, 160); emit({ k: 'square', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 420, s: pick([3, 4, 5]), col: pick(CONFETTI), max: rnd(.6, 1) }); }
             } else {
                 emit({ k: 'ring', x, y, r0: 2, r1: 30, col: getComputedStyle(document.body).getPropertyValue('--moss').trim() || '#56735C', max: .7 });
             }
+            wake();
+        },
+
+        /** Your own stickers ({ fall, done, ask }, each a loaded image or null). */
+        setStickers(next) {
+            stickers = { fall: next.fall ?? null, done: next.done ?? null, ask: next.ask ?? null };
             wake();
         },
 

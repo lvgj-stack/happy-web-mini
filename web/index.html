@@ -867,6 +867,33 @@
   body[data-skin="wild"] .row.asking .status::after { content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 8px; height: 6.5px; background: var(--amber);
     clip-path: polygon(0 0, 100% 50%, 0 100%); transform-origin: 0 50%; animation: flag .9s ease-in-out infinite; }
   @keyframes flag { 0%, 100% { transform: scaleX(1) skewY(0); } 50% { transform: scaleX(.75) skewY(12deg); } }
+  body[data-skin="sea"] .row .status, body[data-skin="star"] .row .status, body[data-skin="pixel"] .row .status { position: relative; }
+  /* 深海: bubbles rise while working; waiting sends out sonar rings */
+  body[data-skin="sea"] .row.busy:not(.asking) .status .st-working { display: none; }
+  body[data-skin="sea"] .row.busy:not(.asking) .status::before, body[data-skin="sea"] .row.busy:not(.asking) .status::after {
+    content: ""; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; border: 1.3px solid var(--moss); border-radius: 50%; opacity: 0; animation: bub 1.3s ease-in infinite; }
+  body[data-skin="sea"] .row.busy:not(.asking) .status::after { left: 1px; animation-delay: .65s; }
+  @keyframes bub { 0% { transform: translateY(6px) scale(.5); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(-7px) scale(1.1); opacity: 0; } }
+  body[data-skin="sea"] .row.asking .status::before { content: ""; position: absolute; inset: 2px; border: 1.5px solid var(--amber); border-radius: 50%; animation: sonar 1.8s ease-out infinite; }
+  @keyframes sonar { from { transform: scale(.8); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+  /* 星夜: a little satellite circles while working; a gold star twinkles while waiting */
+  body[data-skin="star"] .row.busy:not(.asking) .status .st-working, body[data-skin="star"] .row.asking .status .st-waiting { display: none; }
+  body[data-skin="star"] .row.busy:not(.asking) .status::before { content: ""; position: absolute; left: 5px; top: 5px; width: 4px; height: 4px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  body[data-skin="star"] .row.busy:not(.asking) .status::after { content: ""; position: absolute; left: 5.5px; top: 5.5px; width: 3px; height: 3px; border-radius: 50%; background: var(--moss); animation: orbit 1.3s linear infinite; }
+  @keyframes orbit { from { transform: rotate(0) translateX(6px); } to { transform: rotate(360deg) translateX(6px); } }
+  body[data-skin="star"] .row.asking .status::after { content: "✦"; width: 14px; font-size: 13px; line-height: 14px; text-align: center; color: var(--amber); text-shadow: 0 0 8px var(--amber); animation: twinkle 1.4s ease-in-out infinite; }
+  @keyframes twinkle { 50% { transform: scale(.6) rotate(45deg); opacity: .5; } }
+  /* 像素: three blocks take turns while working; a "!" block hops while waiting; hard edges and offset shadows */
+  body[data-skin="pixel"] .row.busy:not(.asking) .status .st-working, body[data-skin="pixel"] .row.asking .status .st-waiting { display: none; }
+  body[data-skin="pixel"] .row.busy:not(.asking) .status::after { content: ""; position: absolute; left: 5.5px; top: 6px; width: 3px; height: 3px; background: var(--ink); animation: pxload .9s infinite steps(1); }
+  @keyframes pxload { 0% { box-shadow: -4px -3px 0 var(--moss), 4px 0 0 var(--ink); transform: none; } 33% { box-shadow: -4px 0 0 var(--ink), 4px 0 0 var(--ink); transform: translateY(-3px); }
+    66% { box-shadow: -4px 0 0 var(--ink), 4px -3px 0 var(--moss); transform: none; } }
+  body[data-skin="pixel"] .row.asking .status::after { content: "!"; position: absolute; left: 2px; top: 0; width: 10px; height: 13px; font: bold 10px/13px ui-monospace, Menlo, Consolas, monospace;
+    text-align: center; color: var(--ink); background: #F2B233; box-shadow: 0 0 0 1.5px var(--ink); animation: hop .7s steps(1) infinite; }
+  @keyframes hop { 50% { transform: translateY(-2px); } }
+  body[data-skin="pixel"] :is(#composer .box, .msg.user) { border: 2px solid var(--ink); border-radius: 0; box-shadow: 3px 3px 0 var(--ink); }
+  body[data-skin="pixel"] #composer .box:focus-within { border-color: var(--moss); box-shadow: 3px 3px 0 var(--moss); }
+  body[data-skin="pixel"] .round { border-radius: 0; box-shadow: 2px 2px 0 var(--ink); }
   /* 旷野 thinking: three rune stones light up one by one after 正在思考 (shapes every font has) */
   body[data-skin="wild"] .msg.thinking-now:not(.background) .label::after { content: ""; margin-left: 8px; letter-spacing: 2px; font-size: .8em; color: var(--moss);
     text-shadow: 0 0 6px color-mix(in srgb, var(--moss) 70%, transparent); animation: runes 1.8s steps(1) infinite; }
