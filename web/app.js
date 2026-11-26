@@ -3215,7 +3215,8 @@ function renderTray() {
         } else {
             item.classList.add('loading');
         }
-        const remove = el('button', 'remove', '×');
+        const remove = el('button', 'remove');
+        remove.innerHTML = iconSvg('close', 12);
         remove.setAttribute('aria-label', '移除这张图片');
         remove.onclick = () => removeImage(s, entry.id);
         item.append(remove);
