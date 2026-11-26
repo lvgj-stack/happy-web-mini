@@ -203,7 +203,7 @@ export function createEffects({ main }) {
         if (moved || Math.round(r.width) !== MW || Math.round(r.height) !== MH) {
             MW = Math.round(r.width); MH = Math.round(r.height);
             amb.width = MW * dpr; amb.height = MH * dpr;
-            seed();
+            reseed();
         }
         if (moved || window.innerWidth !== W || window.innerHeight !== H) {
             W = window.innerWidth; H = window.innerHeight;
@@ -265,6 +265,17 @@ export function createEffects({ main }) {
         return { x: left ? rnd(-60, -10) : rnd(0, MW), y: rnd(MH * .15, MH * .75), vx: rnd(28, 60), ph: rnd(0, 6.3), rot: rnd(0, 6.3), vr: rnd(-2, 2), s: rnd(5, 8), col: pick(LEAVES) };
     }
     const horizon = () => Math.max(90, Math.min(MH * .3, 260));
+
+    /** seed(), but a failure leaves an empty scene (logged) instead of stopping the loop. */
+    function reseed() {
+        try {
+            seed();
+        } catch (e) {
+            scene = {};
+            if (!broken) console.error('effects: ambient scene failed', e);
+            broken = true;
+        }
+    }
 
     function seed() {
         scene = {};
@@ -519,7 +530,7 @@ export function createEffects({ main }) {
             const changed = id !== skin;
             skin = id; motion = m; time = t;
             if (m === 'off') parts = [];
-            if (changed) { parts = []; seed(); }
+            if (changed) { parts = []; reseed(); }
             fit();
             clear();
             wake();

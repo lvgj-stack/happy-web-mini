@@ -164,7 +164,7 @@
   .check:has(input:disabled) { color: var(--muted); cursor: default; }
   .labelled .field { width: auto; min-width: 150px; color: var(--ink); }
   /* 背景: one swatch per choice, the picked one ringed */
-  #skin-swatches, #wallpaper-swatches { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 4px; }
+  #skin-swatches, #sticker-swatches, #wallpaper-swatches { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 4px; }
   .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 56px; color: var(--muted); font-size: 12px; line-height: 1.4; cursor: pointer; position: relative; }
   .swatch .chip { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--rule); background: var(--sheet) center / cover no-repeat; color: var(--muted); }
   .swatch .chip svg { width: 20px; height: 20px; }
@@ -176,7 +176,14 @@
   #wallpaper-image-row:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-top: 12px; }
   #wallpaper-fade { width: 160px; accent-color: var(--moss); }
   #wallpaper-fade-value { min-width: 34px; }
-  #wallpaper-error:empty { display: none; }
+  #wallpaper-error:empty, #sticker-error:empty { display: none; }
+  .sticker-hint { margin-top: 18px !important; }
+  /* 自定义贴图: a swatch per place; a set one shows its picture and a small × to clear it */
+  .sticker { position: relative; }
+  .sticker .chip { background-size: contain; background-origin: content-box; padding: 6px; }
+  .sticker-clear { position: absolute; top: -6px; right: -2px; width: 20px; height: 20px; justify-content: center; border-radius: 50%;
+    font-size: 13px; line-height: 1; color: var(--muted); background: var(--surface); box-shadow: 0 0 0 1px var(--rule); }
+  .sticker-clear:hover { color: var(--ink); }
   /* 字号: the same swatches, each chip showing its own size */
   #chat-scale-swatches { display: flex; flex-wrap: wrap; gap: 14px; }
   #chat-scale-swatches .chip { font: 400 17px/1 var(--serif); color: var(--ink); background: var(--surface); }
@@ -1017,6 +1024,10 @@
       <h3>皮肤</h3>
       <p class="hint">整个界面的配色，加上聊天区的氛围动效和几个时刻的小动画。旷野跟着时间从白天到黄昏再到夜里。只保存在这个浏览器里。</p>
       <div id="skin-swatches" role="radiogroup" aria-label="皮肤"></div>
+      <p class="hint sticker-hint">自定义贴图：换成你自己的图片（透明背景的 PNG 最好），每套皮肤都能用。飘落物替换聊天区里飘的花瓣、叶子这些；干完了的会从那一行飞出来；等你回答的在那一行旁边晃。只保存在这个浏览器里。</p>
+      <div id="sticker-swatches" role="group" aria-label="自定义贴图"></div>
+      <p class="error" id="sticker-error"></p>
+      <input type="file" id="sticker-file" accept="image/png,image/jpeg,image/webp,image/gif,image/*" hidden>
       <h3>动效</h3>
       <p class="hint">「只在事件时」去掉一直在动的背景，只留发消息、干完了这些时刻的动画。系统设置了「减少动态效果」时默认关闭。只保存在这个浏览器里。</p>
       <div class="radio-list" role="radiogroup" aria-label="动效">

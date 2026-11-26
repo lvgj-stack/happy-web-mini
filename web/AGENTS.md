@@ -32,7 +32,7 @@
 - `localStorage` 的键都以 `happy.` 开头。现有的键有：`happy.server`、`happy.token`、`happy.secret`、`happy.seen`、
   `happy.collapsed`、`happy.hostOrder`（电脑的顺序，`{ v: 1, keys: [machineKey…] }`）、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
   `happy.linksHidden`、`happy.linkNames`（右栏链接自定义名称，`{ v: 1, names: { url: label } }`，退出登录时清除）、`happy.links.<会话 id>`、`happy.lines.<会话 id>`、`happy.usage.<会话 id>`（用量页的 token 统计），以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
-  `happy.skin`（皮肤和动效，`{ v: 1, id, motion }`，见 `skins.js`）、`happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
+  `happy.skin`（皮肤和动效，`{ v: 1, id, motion }`，见 `skins.js`）、`happy.skin.sticker.fall` / `.done` / `.ask`（自定义贴图，128px 的 PNG data URL，见 `stickers.js`）、`happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
   `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
 - 已读：正在看的会话，标签页可见、不在设置页或用量页（`coveredByPage()`）、并且窗口有焦点（`document.hasFocus()`）才算看过（`viewing()`），网页和 Mac 应用一样；
   窗口重新拿到焦点（`focus`）时补标已读。
@@ -55,6 +55,9 @@
 - 动效在 `effects.js`：氛围画布是 `main` 的第一个子元素（`z-index: -1`，`main` 有 `isolation: isolate`），所以画在聊天区背景之上、内容之下；
   设置页 / 用量页隐藏 `main` 其他子元素的规则要排除 `.fx-ambient`。事件画布 `position: fixed` 盖住窗口。两块都 `pointer-events: none`。
   一个 rAF 循环，`document.hidden` 时不画，氛围关着、没有粒子、也没有等你回答的行时就停；`renderList` 和 `refreshActivityRow` 之后调 `effects.wake()`。
+- 自定义贴图：`stickers.js` 只认 `data:image/png;base64,`、每张不超过 20 万字符，坏的当没有；`applyStickers()` 加载成 `Image` 交给 `effects.setStickers()`。
+  `fall` 让各场景跳过自己的小飘落物（场景本身照画），苔绿设了 `fall` 也算有氛围；`ask` 让所有皮肤都画等待行（`waitingRows()` 只算看得见的行）。
+- 场景出错（`seed` 或绘制抛异常）只打一次日志、清空这个场景，不能让动画循环停掉，否则事件动效也跟着没了。
 - 「干完了」= `isThinking` 由真变假（`trackActivity`、`onEphemeral` 两处），见 `celebrateDone`。侧栏状态图标按皮肤换是纯 CSS：
   藏掉对应的 svg，用 `.status` 的伪元素画。字形只用各平台字体都有的（试过如尼字母，Linux 上没有字体会显示成方框）。
 

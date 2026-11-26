@@ -42,6 +42,7 @@ import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
 import { SKINS, hexRgb, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from './skins.js';
 import { createEffects } from './effects.js';
+import { SLOTS, prepareSticker, readStickers, removeSticker, setSticker } from './stickers.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
 import {
     archivedBefore, canDeleteSession, clearSessionStorage, deleteSessionsOnServer,
@@ -3559,6 +3560,68 @@ function renderSkinSetting() {
     for (const radio of document.querySelectorAll('input[name="skin-motion"]')) radio.checked = radio.value === motion;
 }
 
+const STICKER_NAMES = { fall: '飘落物', done: '干完了', ask: '等你回答' };
+
+/** Hand the stickers kept in this browser to effects.js, as loaded images. */
+async function applyStickers() {
+    const kept = readStickers(localStorage);
+    const load = (src) => (src ? new Promise((done) => {
+        const img = new Image();
+        img.onload = () => done(img);
+        img.onerror = () => done(null);
+        img.src = src;
+    }) : null);
+    const [fall, doneImg, ask] = await Promise.all(SLOTS.map((slot) => load(kept[slot])));
+    effects.setStickers({ fall, done: doneImg, ask });
+}
+
+/** 自定义贴图 in settings: one swatch per place; a click picks a picture, × clears it. */
+function renderStickerSetting() {
+    const kept = readStickers(localStorage);
+    $('sticker-swatches').replaceChildren(...SLOTS.map((slot) => {
+        const wrap = el('div', 'sticker');
+        const b = el('button', 'swatch');
+        b.type = 'button';
+        b.title = kept[slot] ? `换一张${STICKER_NAMES[slot]}贴图` : `选一张${STICKER_NAMES[slot]}贴图`;
+        const chip = el('span', 'chip');
+        if (kept[slot]) chip.style.backgroundImage = `url("${kept[slot]}")`;
+        else chip.insertAdjacentHTML('beforeend', iconSvg('image'));
+        b.append(chip, el('span', null, STICKER_NAMES[slot]));
+        b.onclick = () => { state.stickerSlot = slot; $('sticker-file').click(); };
+        wrap.append(b);
+        if (kept[slot]) {
+            const x = el('button', 'sticker-clear', '×');
+            x.type = 'button';
+            x.title = `清除${STICKER_NAMES[slot]}贴图`;
+            x.setAttribute('aria-label', x.title);
+            x.onclick = () => { removeSticker(localStorage, slot); stickersChanged(); };
+            wrap.append(x);
+        }
+        return wrap;
+    }));
+}
+
+function stickersChanged() {
+    $('sticker-error').textContent = '';
+    applyStickers();
+    renderStickerSetting();
+    settingsSaved();
+}
+
+async function pickStickerFile(file) {
+    const slot = state.stickerSlot;
+    if (!file || !SLOTS.includes(slot)) return;
+    $('sticker-error').textContent = '';
+    try {
+        setSticker(localStorage, slot, await prepareSticker(file));
+    } catch (e) {
+        const full = e?.name === 'QuotaExceededError';
+        $('sticker-error').textContent = full ? '这个浏览器的存储空间不够了，先清掉背景图片或别的贴图再试' : e.message;
+        return;
+    }
+    stickersChanged();
+}
+
 function wallpaperChanged() {
     $('wallpaper-error').textContent = '';
     applyWallpaper();
@@ -3606,6 +3669,7 @@ function renderSettings() {
     if (document.activeElement !== $('brand-input')) $('brand-input').value = localStorage.getItem('happy.brand') || '';
     renderNotifySetting();
     renderSkinSetting();
+    renderStickerSetting();
     renderWallpaperSetting();
     renderChatScaleSetting();
     const worktreeDefault = readWorktreeDefault(localStorage);
@@ -4949,6 +5013,8 @@ document.querySelector('main').addEventListener('pointerdown', (e) => {
     effects.click(e.clientX, e.clientY);
 });
 applySkin(); // applies the wallpaper too, veiled in the skin's colors
+applyStickers();
+$('sticker-file').onchange = () => { pickStickerFile($('sticker-file').files[0]); $('sticker-file').value = ''; };
 // 旷野 follows the clock: look again every minute, and re-apply only when the time of day turns.
 setInterval(() => { if (timeOfDay(new Date()) !== state.skinTime) applySkin(); }, 60_000);
 for (const radio of document.querySelectorAll('input[name="skin-motion"]')) {
