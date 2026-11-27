@@ -3027,6 +3027,7 @@ async function send(choice) {
     button.disabled = true;
     setButton(button, 'send', pending.length ? '正在上传' : '发送', true);
     button.title = pending.length ? '正在上传' : '正在发送';
+    let posted = false;
     try {
         const images = await Promise.all(pending.map((p) => p.promise));
         const refs = await Promise.all(images.map((image) => uploadImage(api, s, image)));
@@ -3048,6 +3049,7 @@ async function send(choice) {
             localId: uuid(),
         });
         await api('POST', `/v3/sessions/${encodeURIComponent(s.id)}/messages`, { messages });
+        posted = true;
         effects.send(button);
         if (!picked) {
             state.drafts.delete(s.id);
@@ -3065,7 +3067,7 @@ async function send(choice) {
         if (!socket?.connected) await pollMessages();
     } catch (e) {
         notice(`没有发出去：${e.message}`);
-        effects.hurt();
+        if (!posted) effects.hurt(); // went out, then a later step failed: no hit
     } finally {
         state.sending = false;
         button.disabled = false;
@@ -3823,6 +3825,7 @@ function connectSocket() {
     socket.on('update', (u) => onUpdate(u?.body).catch((e) => console.error(e)));
     socket.on('ephemeral', onEphemeral);
     socket.on('disconnect', () => effects.setOnline(false));
+    socket.on('connect_error', () => effects.setOnline(false)); // never connected: no 'disconnect' comes
 }
 
 async function onUpdate(body) {

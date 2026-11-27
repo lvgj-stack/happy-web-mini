@@ -177,7 +177,7 @@ export function createRange() {
     // ----- ambient -----
 
     function draw(c, dt, t, v) {
-        if (v.bottom - v.top < 120 || v.right < 160) return;
+        if (v.bottom - v.top < 120 || v.right < 160) { muzzle = port = null; return; } // too small to draw (a phone with its keyboard up)
         const hz = horizon(v), vx = v.right / 2;
         for (const p of dust) { p.x += p.vx * dt; p.y += p.vy * dt; if (p.y < -.02) { p.y = 1.02; p.x = Math.random(); } if (p.x > 1.02) p.x = -.02; }
         for (const tg of targets) if (!tg.down && !tg.falling && tg.wait <= 0) { tg.f += tg.v * dt; if (tg.f < .1 || tg.f > .9) { tg.v = -tg.v; tg.f = Math.max(.1, Math.min(.9, tg.f)); } }
@@ -326,7 +326,8 @@ export function createRange() {
     /** The done feed, the streak call-out and the hit flash at the window's edge. Returns whether any is still showing. */
     function overlay(c, dt, v) {
         feed = feed.filter((f) => (f.age += dt) < 4.6);
-        feed.forEach((f, i) => {
+        // not over the settings or usage page
+        if (v.hud) feed.forEach((f, i) => {
             const slide = (1 - Math.min(1, f.age / .22)) * 24, fade = f.age > 4.2 ? (4.6 - f.age) / .4 : 1;
             const name = f.name.length > 18 ? f.name.slice(0, 17) + '…' : f.name;
             c.save(); c.globalAlpha = Math.min(1, f.age / .15) * fade;
@@ -387,7 +388,10 @@ export function createRange() {
 
     return {
         seed, tick, draw, overlay, busy, lockOn,
-        clearLocks: () => locks.clear(),
+        /** Forget lock-ons of rows no longer waiting, so a row that waits again gets the closing-in again. */
+        keepLocks(ids) { for (const id of locks.keys()) if (!ids.includes(id)) locks.delete(id); },
+        /** Drop what is still showing (feed, streak, red flash, lock-ons, the weapon's spot): the skin or motion changed. */
+        reset() { feed = []; streakShow = null; hurtAge = 9; locks.clear(); muzzle = port = null; },
         /** A message sent: one round, recoil; where the shot comes from (chat-area coordinates), or null without a weapon on screen. */
         fire() {
             mag = fireRound(mag);

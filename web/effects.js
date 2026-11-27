@@ -235,7 +235,7 @@ export function createEffects({ main }) {
 
     function wake() {
         if (raf || document.hidden) return;
-        if (!ambientOn() && !parts.length && !waitingRows().length && !(skin === 'range' && range.busy())) { clear(); return; }
+        if (!ambientOn() && !parts.length && !waitingRows().length && !(skin === 'range' && motion !== 'off' && range.busy())) { clear(); return; }
         last = performance.now();
         raf = requestAnimationFrame(frame);
     }
@@ -278,7 +278,8 @@ export function createEffects({ main }) {
             for (const row of rows) (stickers.ask ? askSticker : skin === 'range' ? lockOn : fairy)(fctx, row);
             fctx.restore();
         }
-        if (!rows.length) { trails.clear(); range.clearLocks(); }
+        if (!rows.length) trails.clear();
+        range.keepLocks(rows.map((r) => r.dataset.id ?? ''));
         if (ambientOn() || parts.length || rows.length || showing) raf = requestAnimationFrame(frame);
         else clear();
     }
@@ -592,6 +593,7 @@ export function createEffects({ main }) {
             const changed = id !== skin;
             skin = id; motion = m; time = t; gun = opts.gun !== false;
             if (m === 'off') parts = [];
+            if (changed || m === 'off') range.reset();
             if (changed) { parts = []; broken = false; reseed(); }
             fit();
             clear();
@@ -717,8 +719,8 @@ export function createEffects({ main }) {
 
         /** A message did not go out: 靶场 takes a hit (health drops, the window's edge flashes red). */
         hurt() {
-            range.hurt();
             if (skin !== 'range' || motion === 'off') return;
+            range.hurt();
             if (ambientOn()) {
                 const v = rangeView(), m = main.getBoundingClientRect(), cr = range.crossAt(v);
                 emit({ k: 'dmg', x: m.left + cr.x, y: m.top + cr.y, a: rnd(0, 6.3), max: 1 });

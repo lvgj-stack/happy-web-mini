@@ -914,7 +914,7 @@
     background: linear-gradient(var(--moss), var(--moss)) center / 1.5px 100% no-repeat, linear-gradient(var(--moss), var(--moss)) center / 100% 1.5px no-repeat;
     -webkit-mask: radial-gradient(circle, transparent 2.5px, #000 3px); mask: radial-gradient(circle, transparent 2.5px, #000 3px); animation: spin 2.4s linear infinite; }
   body[data-skin="range"] .row.asking .status::after { content: "[!]"; position: absolute; left: -3px; top: 0; width: 20px; font: bold 10px/14px ui-monospace, Menlo, Consolas, monospace;
-    text-align: center; color: var(--amber); animation: blink 1s steps(2, start) infinite; }
+    text-align: center; color: var(--amber); animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: .25; } }
   /* A waiting-for-you sticker (effects.js draws it on the state icon's spot) stands in for the skin's mark */
   body.ask-sticker .row.asking .status > svg { visibility: hidden; }

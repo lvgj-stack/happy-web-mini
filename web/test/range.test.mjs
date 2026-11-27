@@ -1,7 +1,7 @@
 // node --test: 靶场 — the magazine, the done streak, radar blips and where the HUD may draw.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MAG, RELOAD, blipSpots, fireRound, hudArea, nextStreak, tickMagazine } from '../range.js';
+import { MAG, RELOAD, blipSpots, createRange, fireRound, hudArea, nextStreak, tickMagazine } from '../range.js';
 
 test('each message fires one round', () => {
     assert.deepEqual(fireRound({ ammo: 24, reload: 0 }), { ammo: 23, reload: 0 });
@@ -58,4 +58,18 @@ test('HUD area: under the chat header, over the composer, left of the docked lin
 test('HUD area: no header, composer or links shown means the whole chat area', () => {
     const main = box(0, 20, 500, 600);
     assert.deepEqual(hudArea({ main, head: null, composer: box(0, 0, 0, 0), links: null }), { top: 0, bottom: 600, right: 500 });
+});
+
+test('reset drops what was still showing, so it does not replay after a skin switch', () => {
+    const r = createRange();
+    r.knock('重构登录页', 1000, null);
+    r.knock('修复 CI', 2000, null);
+    r.hurt();
+    assert.equal(r.busy(), true);
+    r.reset();
+    assert.equal(r.busy(), false);
+});
+
+test('without a weapon drawn there is nowhere to fire from', () => {
+    assert.equal(createRange().fire(), null);
 });
