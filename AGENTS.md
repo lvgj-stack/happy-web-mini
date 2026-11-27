@@ -58,3 +58,5 @@ Mac 应用由 CI（`.github/workflows/desktop-release.yml`）发版，不要手�
 - 实现上的约定和要点（协议字段、RPC、缓存键、为什么这样做），写进对应目录的 `AGENTS.md`。
 - 规范变了（新的流程、新的约定），更新 `AGENTS.md`。`CLAUDE.md` 只是引用 `AGENTS.md`，不要往里写内容。
 - 设计稿和实现计划放在 `docs/superpowers/specs/`、`docs/superpowers/plans/`，文件名带日期。
+- README 里的图放在 `docs/diagrams/`：`build.py` 生成每张图的 HTML（内联 SVG，配色取自 `web/index.html`），README 引用从 HTML 导出的 2 倍 PNG。
+  功能变了让图过时，就改 `build.py`、重新生成 HTML 再导出 PNG（diagram-design skill 的 `scripts/export_png.py <html> <png> 2`）。

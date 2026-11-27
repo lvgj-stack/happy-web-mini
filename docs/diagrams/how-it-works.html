@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>消息怎么到你眼前</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #F2F3EF; color: #262A27; min-height: 100vh;
+           display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-size: 0.8rem; font-weight: 500; color: #5B625C; margin-bottom: 0.5rem; }
+    h1 { font-family: 'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif; font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+         letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">架构 · 工作原理</p>
+    <h1>消息怎么到你眼前</h1>
+    <div class="diagram-container">
+<svg viewBox="0 0 960 416" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="how-it-works-title how-it-works-desc">
+<title id="how-it-works-title">消息怎么到你眼前</title>
+<desc id="how-it-works-desc">Happy CLI 和 daemon 在你的电脑上跑 agent，经 Happy server 把加密消息转给手机 App 和 happy-web-mini，后者在本地解密。</desc>
+<defs>
+<marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#5B625C"/></marker>
+<marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#4A6650"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#F2F3EF"/>
+<rect x="40" y="48" width="248" height="328" rx="8" fill="rgba(38,42,39,0.02)" stroke="rgba(38,42,39,0.16)" stroke-width="0.8"/><rect x="52" y="52" width="60" height="16" rx="2" fill="#F2F3EF"/><text x="82.0" y="64.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">你的电脑</text>
+<rect x="672" y="48" width="248" height="240" rx="8" fill="rgba(38,42,39,0.02)" stroke="rgba(38,42,39,0.16)" stroke-width="0.8"/><rect x="684" y="52" width="72" height="16" rx="2" fill="#F2F3EF"/><text x="720.0" y="64.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">你看的地方</text>
+<path d="M164,200 V144" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M164,296 V256" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M264,228 H380" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M264,324 H412 Q420,324 420,316 V272" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M580,228 H696" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M540,184 V124 Q540,116 548,116 H696" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M796,144 V192" fill="none" stroke="#5B625C" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<rect x="172" y="164.0" width="56" height="16" rx="2" fill="#F2F3EF"/><text x="200.0" y="176.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">包装运行</text>
+<rect x="172" y="268.0" width="56" height="16" rx="2" fill="#F2F3EF"/><text x="200.0" y="280.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">按需启动</text>
+<rect x="294.0" y="206" width="56" height="16" rx="2" fill="#F2F3EF"/><text x="322.0" y="218.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">加密消息</text>
+<rect x="306.0" y="302" width="64" height="16" rx="2" fill="#F2F3EF"/><text x="338.0" y="314.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">机器 RPC</text>
+<rect x="608.0" y="210" width="60" height="12" rx="2" fill="#F2F3EF"/><text x="638.0" y="219" fill="#626963" font-size="8" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle" letter-spacing="0.06em">SOCKET.IO</text>
+<rect x="804" y="160.0" width="56" height="16" rx="2" fill="#F2F3EF"/><text x="832.0" y="172.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">扫码登录</text>
+<rect x="64" y="88" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="64" y="88" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="164.0" y="114.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Claude Code 等 agent</text><text x="164.0" y="127.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">codex · cursor · gemini</text>
+<rect x="64" y="200" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="64" y="200" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="164.0" y="226.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Happy CLI</text><text x="164.0" y="239.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">happy claude / happy codex</text>
+<rect x="64" y="296" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="64" y="296" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="164.0" y="320.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Happy daemon</text><text x="164.0" y="336.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">新建 · 恢复 · Fork 会话</text>
+<rect x="380" y="184" width="200" height="88" rx="6" fill="#F2F3EF"/><rect x="380" y="184" width="200" height="88" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480.0" y="218.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Happy server</text><text x="480.0" y="231.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">api.cluster-fluster.com</text><text x="480.0" y="247.0" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">只存密文，转发消息和 RPC</text>
+<rect x="696" y="88" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="696" y="88" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="796.0" y="112.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Happy App</text><text x="796.0" y="128.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">手机 · iOS / Android</text>
+<rect x="696" y="192" width="200" height="72" rx="6" fill="#F2F3EF"/><rect x="696" y="192" width="200" height="72" rx="6" fill="#E8EEE6" stroke="#4A6650" stroke-width="1.2"/><text x="796.0" y="216.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">happy-web-mini</text><text x="796.0" y="232.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">浏览器 · Mac 应用</text><text x="796.0" y="248.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">在本地解密</text>
+<text x="436" y="308" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="start">server 只转发密文，</text>
+<text x="436" y="328" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="start">账户主密钥只在手机和这里。</text>
+</svg>
+    </div>
+  </div>
+</body>
+</html>

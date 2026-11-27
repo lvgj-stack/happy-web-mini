@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>恢复时重建已删除的 worktree</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #F2F3EF; color: #262A27; min-height: 100vh;
+           display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-size: 0.8rem; font-weight: 500; color: #5B625C; margin-bottom: 0.5rem; }
+    h1 { font-family: 'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif; font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+         letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">流程图 · 恢复会话</p>
+    <h1>恢复时重建已删除的 worktree</h1>
+    <div class="diagram-container">
+<svg viewBox="0 0 960 696" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="resume-worktree-title resume-worktree-desc">
+<title id="resume-worktree-title">恢复时重建已删除的 worktree</title>
+<desc id="resume-worktree-desc">恢复会话时如果目录已删且是 worktree，先按分支是否还在检出原分支或新建同名分支，在原路径重建后再恢复一次。</desc>
+<defs>
+<marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#5B625C"/></marker>
+<marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#4A6650"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#F2F3EF"/>
+<path d="M480,72 V104" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M480,152 V176" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M560,216 H660" fill="none" stroke="#4A6650" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+<path d="M480,256 V280" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M400,320 H300" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M480,360 V384" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M400,424 H288 Q280,424 280,432 V488" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M560,424 H672 Q680,424 680,432 V488" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M280,544 V568 Q280,576 288,576 H432 Q440,576 440,584 V600" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M680,544 V568 Q680,576 672,576 H528 Q520,576 520,584 V600" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<path d="M580,628 H892 Q900,628 900,620 V136 Q900,128 892,128 H580" fill="none" stroke="#5B625C" stroke-width="1.2" marker-end="url(#arrow)"/>
+<rect x="600.0" y="194" width="20" height="16" rx="2" fill="#F2F3EF"/><text x="610.0" y="206.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">是</text>
+<rect x="488" y="260.0" width="20" height="16" rx="2" fill="#F2F3EF"/><text x="498.0" y="272.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">否</text>
+<rect x="340.0" y="298" width="20" height="16" rx="2" fill="#F2F3EF"/><text x="350.0" y="310.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">否</text>
+<rect x="488" y="364.0" width="20" height="16" rx="2" fill="#F2F3EF"/><text x="498.0" y="376.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">是</text>
+<rect x="334.0" y="402" width="20" height="16" rx="2" fill="#F2F3EF"/><text x="344.0" y="414.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">是</text>
+<rect x="606.0" y="402" width="20" height="16" rx="2" fill="#F2F3EF"/><text x="616.0" y="414.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">否</text>
+<rect x="824" y="392.0" width="68" height="16" rx="2" fill="#F2F3EF"/><text x="858.0" y="404.5" fill="#626963" font-size="12" font-weight="500" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">再恢复一次</text>
+<rect x="380" y="32" width="200" height="40" rx="20.0" fill="#F2F3EF"/><rect x="380" y="32" width="200" height="40" rx="20.0" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480.0" y="56.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">点「恢复会话」</text>
+<rect x="380" y="104" width="200" height="48" rx="6" fill="#F2F3EF"/><rect x="380" y="104" width="200" height="48" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480.0" y="126.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">daemon 在原目录恢复</text><text x="480.0" y="139.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">resume-happy-session</text>
+<polygon points="480,176 560,216 480,256 400,216" fill="#F2F3EF"/><polygon points="480,176 560,216 480,256 400,216" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480" y="220.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">目录还在？</text>
+<rect x="660" y="196" width="200" height="40" rx="20.0" fill="#F2F3EF"/><rect x="660" y="196" width="200" height="40" rx="20.0" fill="#E8EEE6" stroke="#4A6650" stroke-width="1.2"/><text x="760.0" y="220.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">接着原来的对话跑</text>
+<polygon points="480,280 560,320 480,360 400,320" fill="#F2F3EF"/><polygon points="480,280 560,320 480,360 400,320" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480" y="324.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">是 worktree 吗？</text>
+<rect x="100" y="300" width="200" height="40" rx="20.0" fill="#F2F3EF"/><rect x="100" y="300" width="200" height="40" rx="20.0" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="200.0" y="324.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">提示：目录已经不在了</text>
+<polygon points="480,384 560,424 480,464 400,424" fill="#F2F3EF"/><polygon points="480,384 560,424 480,464 400,424" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480" y="428.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">分支还在？</text>
+<rect x="180" y="488" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="180" y="488" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="280.0" y="514.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">检出原分支</text><text x="280.0" y="527.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">git worktree add</text>
+<rect x="580" y="488" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="580" y="488" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="680.0" y="512.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">从主目录新建同名分支</text><text x="680.0" y="528.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">没提交的改动找不回</text>
+<rect x="380" y="600" width="200" height="56" rx="6" fill="#F2F3EF"/><rect x="380" y="600" width="200" height="56" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480.0" y="626.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">在原路径重建 worktree</text><text x="480.0" y="639.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">.dev/worktree/&lt;name&gt;</text>
+<text x="100" y="628" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="start">Fork 遇到同样的情况，</text>
+<text x="100" y="648" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="start">也先重建再启动。</text>
+</svg>
+    </div>
+  </div>
+</body>
+</html>

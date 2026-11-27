@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>会话列表怎么分组</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #F2F3EF; color: #262A27; min-height: 100vh;
+           display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-size: 0.8rem; font-weight: 500; color: #5B625C; margin-bottom: 0.5rem; }
+    h1 { font-family: 'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif; font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+         letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print { .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">树 · 会话列表</p>
+    <h1>会话列表怎么分组</h1>
+    <div class="diagram-container">
+<svg viewBox="0 0 960 432" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="session-tree-title session-tree-desc">
+<title id="session-tree-title">会话列表怎么分组</title>
+<desc id="session-tree-desc">会话列表按电脑分组，每台电脑下分 Bot、任务和项目目录，项目目录下再分直接在目录里跑的会话和各个 worktree 里的会话。</desc>
+<defs>
+<marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#5B625C"/></marker>
+<marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="#4A6650"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#F2F3EF"/>
+<path d="M480,92 V116" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M160,116 H680" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M160,116 V140" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M400,116 V140" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M680,116 V140" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M680,192 V216" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M560,216 H800" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M560,216 V240" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M800,216 V240" fill="none" stroke="#5B625C" stroke-width="1"/>
+<path d="M800,292 V340" fill="none" stroke="#5B625C" stroke-width="1"/>
+<rect x="400" y="40" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="400" y="40" width="160" height="52" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="480.0" y="62.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">一台电脑</text><text x="480.0" y="78.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">可以拖动排先后</text>
+<rect x="80" y="140" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="80" y="140" width="160" height="52" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="160.0" y="162.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Bot</text><text x="160.0" y="178.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">Happy Agent 的 bot</text>
+<rect x="320" y="140" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="320" y="140" width="160" height="52" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="400.0" y="164.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">任务</text><text x="400.0" y="177.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">~/Tasks/…</text>
+<rect x="600" y="140" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="600" y="140" width="160" height="52" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="680.0" y="164.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">项目目录</text><text x="680.0" y="177.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">~/code/app</text>
+<rect x="480" y="240" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="480" y="240" width="160" height="52" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="560.0" y="262.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">会话</text><text x="560.0" y="278.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">直接在目录里跑</text>
+<rect x="720" y="240" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="720" y="240" width="160" height="52" rx="6" fill="#E8EEE6" stroke="#4A6650" stroke-width="1.2"/><text x="800.0" y="264.0" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">worktree</text><text x="800.0" y="277.0" fill="#5B625C" font-size="9" font-family="'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace" text-anchor="middle">.dev/worktree/*</text>
+<rect x="720" y="340" width="160" height="52" rx="6" fill="#F2F3EF"/><rect x="720" y="340" width="160" height="52" rx="6" fill="#FFFFFF" stroke="#262A27" stroke-width="1"/><text x="800.0" y="362.5" fill="#262A27" font-size="12" font-weight="600" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">会话</text><text x="800.0" y="378.5" fill="#5B625C" font-size="12" font-family="'Geist', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif" text-anchor="middle">在 worktree 里跑</text>
+<text x="80" y="268" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="start">Bot 和任务各自成组，</text>
+<text x="80" y="288" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="start">其余会话按目录排成树。</text>
+<text x="696" y="362" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="end">worktree 不单独成组，</text>
+<text x="696" y="382" fill="#5B625C" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif SC', 'Songti SC', serif" text-anchor="end">归到所属仓库下面。</text>
+</svg>
+    </div>
+  </div>
+</body>
+</html>
