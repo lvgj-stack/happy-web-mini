@@ -7,6 +7,8 @@
 // nothing here runs until createEffects() is called. Drawings follow the
 // skins preview page; every shape is drawn here, no images.
 
+import { blipSpots, createRange, drawRangeParticle, hudArea } from './range.js';
+
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const PETALS = ['#F4A7B9', '#F7C5D0', '#EE8FA6', '#FBD9E1', '#F9B3C4'];
@@ -163,6 +165,7 @@ function drawParticle(c, p, dt) {
         c.beginPath(); c.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * e, 0, 7); c.stroke(); c.globalAlpha = 1;
         break;
     }
+    default: drawRangeParticle(c, p, k); // 靶场's own: flash, tracer, casing, hit, shard, hole, dmg
     }
     return true;
 }
@@ -172,8 +175,9 @@ function drawParticle(c, p, dt) {
 /**
  * Starts the effects for the page.
  * @param {{ main: HTMLElement }} opts the chat area; the ambient scene draws behind its content
- * @returns {{ setSkin(id: string, motion: string, time: string): void, send(el: Element): void,
- *   done(el: Element): void, click(x: number, y: number): void, setStickers(s: object): void, wake(): void }}
+ * @returns {{ setSkin(id: string, motion: string, time: string, opts?: { gun?: boolean }): void, send(el: Element): void,
+ *   done(el: Element, name?: string): void, click(x: number, y: number): void, hurt(): void, setOnline(on: boolean): void,
+ *   setStickers(s: object): void, wake(): void }}
  */
 export function createEffects({ main }) {
     const amb = document.createElement('canvas');
@@ -193,6 +197,10 @@ export function createEffects({ main }) {
     let scene = {};               // the ambient scene's own state
     let stickers = { fall: null, done: null, ask: null }; // loaded images of your own, or null
     const trails = new Map();     // fairy trails by row id
+    const range = createRange();  // 靶场's magazine, health, targets and feed
+    let gun = true;               // 靶场 shows its weapon
+    let rview = null;             // 靶场's view of the page this frame (rangeView)
+    let blips = [], blipsAt = -9; // 靶场's radar blips, looked up once a second
 
     function fit() {
         // The window can move to a screen with another pixel ratio without resizing: reallocate then too.
@@ -216,7 +224,7 @@ export function createEffects({ main }) {
     const listBox = () => document.getElementById('list')?.getBoundingClientRect();
     /** Waiting rows to draw by: inside the list's visible box only, so a hidden or scrolled-away row neither draws nor keeps the loop running. */
     const waitingRows = () => {
-        if (motion === 'off' || (skin !== 'wild' && !stickers.ask)) return [];
+        if (motion === 'off' || (skin !== 'wild' && skin !== 'range' && !stickers.ask)) return [];
         const box = listBox();
         if (!box?.width || !box.height) return [];
         return [...document.querySelectorAll('#list .row.asking')].filter((row) => {
@@ -227,7 +235,7 @@ export function createEffects({ main }) {
 
     function wake() {
         if (raf || document.hidden) return;
-        if (!ambientOn() && !parts.length && !waitingRows().length) { clear(); return; }
+        if (!ambientOn() && !parts.length && !waitingRows().length && !(skin === 'range' && range.busy())) { clear(); return; }
         last = performance.now();
         raf = requestAnimationFrame(frame);
     }
@@ -243,6 +251,7 @@ export function createEffects({ main }) {
         const dt = Math.min(.05, (ts - last) / 1000);
         last = ts; now += dt;
         fit();
+        if (skin === 'range') { range.tick(dt); rview = rangeView(); }
         actx.setTransform(dpr, 0, 0, dpr, 0, 0); actx.clearRect(0, 0, MW, MH);
         // A scene that throws must not take the event shows down with it: log once, draw the rest.
         if (ambientOn()) {
@@ -260,16 +269,17 @@ export function createEffects({ main }) {
         }
         fctx.setTransform(dpr, 0, 0, dpr, 0, 0); fctx.clearRect(0, 0, W, H);
         parts = parts.filter((p) => drawParticle(fctx, p, dt));
+        const showing = skin === 'range' && motion !== 'off' && range.overlay(fctx, dt, rview);
         const rows = waitingRows();
         if (rows.length) {
             // clipped to the list, so a row half under the sidebar's header does not draw over it
             const box = listBox();
             fctx.save(); fctx.beginPath(); fctx.rect(box.left, box.top, box.width, box.height); fctx.clip();
-            for (const row of rows) (stickers.ask ? askSticker : fairy)(fctx, row);
+            for (const row of rows) (stickers.ask ? askSticker : skin === 'range' ? lockOn : fairy)(fctx, row);
             fctx.restore();
         }
-        if (!rows.length) trails.clear();
-        if (ambientOn() || parts.length || rows.length) raf = requestAnimationFrame(frame);
+        if (!rows.length) { trails.clear(); range.clearLocks(); }
+        if (ambientOn() || parts.length || rows.length || showing) raf = requestAnimationFrame(frame);
         else clear();
     }
 
@@ -324,8 +334,41 @@ export function createEffects({ main }) {
             const n = Math.max(3, Math.round(MH / 180));
             scene.clouds = Array.from({ length: n }, (_, i) => cloud(rnd(-40, MW), 30 + i * (MH - 120) / n));
         }
+        if (skin === 'range') range.seed(MW, MH);
         scene.sprites = Array.from({ length: 9 }, () => sprite(false));
     }
+
+    /**
+     * 靶场's view of the page: the free part of the chat area (under its header,
+     * over the composer, left of the docked links panel), whether the HUD and the
+     * weapon show (not on the settings or usage page; the weapon needs room), and
+     * the radar's blips from the sidebar rows.
+     */
+    function rangeView() {
+        const m = main.getBoundingClientRect();
+        const shown = (el) => (el && el.offsetParent !== null ? el.getBoundingClientRect() : null);
+        const links = document.getElementById('links');
+        const area = hudArea({
+            main: m,
+            head: shown(document.getElementById('chat-head')),
+            composer: shown(document.getElementById('composer')) ?? shown(document.getElementById('readonly')),
+            links: links && !links.classList.contains('open') ? shown(links) : null,
+        });
+        if (now - blipsAt > 1 || now < blipsAt) {
+            blipsAt = now;
+            blips = blipSpots([...document.querySelectorAll('#list .row')].map((r) => ({
+                id: r.dataset.id ?? '', status: r.classList.contains('asking') ? 'waiting' : r.classList.contains('busy') ? 'working' : 'idle',
+            })));
+        }
+        const page = document.body.matches('.in-settings, .in-usage');
+        return { ...area, left: m.left, y0: m.top, hud: !page, gun: gun && MW >= 520, blips, winW: W, winH: H };
+    }
+
+    function shards(x, y, n, col) {
+        for (let i = 0; i < n; i++) { const a = rnd(0, 6.3), v = rnd(120, 320); emit({ k: 'shard', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 600, drag: 2, col, max: rnd(.18, .35) }); }
+    }
+
+    const lockOn = (c, row) => range.lockOn(c, row, now);
 
     function bubble(bottom) { return { x: rnd(0, MW), y: bottom ? MH + rnd(5, 40) : rnd(0, MH), r: rnd(1.5, 5), vy: rnd(-14, -36), ph: rnd(0, 6.3) }; }
     /** A pixel cloud on its own lane: `lane` stays put, each lap only varies around it. */
@@ -537,7 +580,7 @@ export function createEffects({ main }) {
         drawSprite(c, stickers.ask, at.left + at.width / 2, at.top + at.height / 2 + Math.sin(now * 4) * 2, 18, Math.sin(now * 3) * .15, 1);
     }
 
-    const SCENES = { sakura, wild, sea, star, pixel };
+    const SCENES = { sakura, wild, sea, star, pixel, range: (c, dt, t) => range.draw(c, dt, t, rview) };
 
     const resize = () => { fit(); wake(); };
     new ResizeObserver(resize).observe(main);
@@ -545,9 +588,9 @@ export function createEffects({ main }) {
     document.addEventListener('visibilitychange', wake);
 
     return {
-        setSkin(id, m, t) {
+        setSkin(id, m, t, opts = {}) {
             const changed = id !== skin;
-            skin = id; motion = m; time = t;
+            skin = id; motion = m; time = t; gun = opts.gun !== false;
             if (m === 'off') parts = [];
             if (changed) { parts = []; broken = false; reseed(); }
             fit();
@@ -573,14 +616,27 @@ export function createEffects({ main }) {
                 setTimeout(() => { if (motion !== 'off') { sparks(o.x + dx, o.y + dy, 7, STARLIGHT); wake(); } }, T * 1000);
             } else if (skin === 'pixel') {
                 for (let i = 0; i < 10; i++) { const a = rnd(-3, -.2), v = rnd(80, 170); emit({ k: 'square', x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 380, s: pick([3, 4, 5]), col: pick(CONFETTI), max: rnd(.6, .9) }); }
+            } else if (skin === 'range') {
+                // the weapon fires at the crosshair; without it on screen the send button flashes and drops a casing
+                const shot = range.fire(), m = main.getBoundingClientRect();
+                emit({ k: 'ring', x: o.x, y: o.y, r0: 10, r1: 26, col: '#FF9A2E', max: .35 });
+                if (shot && ambientOn()) {
+                    const mx = m.left + shot.muzzle.x, my = m.top + shot.muzzle.y;
+                    emit({ k: 'flash', x: mx, y: my, a: shot.muzzle.a, size: 26, max: .09 });
+                    emit({ k: 'tracer', x: mx, y: my, x0: mx, y0: my, x2: m.left + shot.cross.x, y2: m.top + shot.cross.y, max: .14 });
+                    emit({ k: 'casing', x: m.left + shot.port.x, y: m.top + shot.port.y, vx: rnd(120, 220), vy: rnd(-380, -280), ay: 1500, rot: rnd(0, 6), vr: rnd(14, 24), floor: m.bottom - 6, max: 1.3 });
+                } else {
+                    emit({ k: 'flash', x: o.x, y: o.r.top, a: -Math.PI / 2, size: 16, max: .09 });
+                    emit({ k: 'casing', x: o.x, y: o.y - 10, vx: rnd(80, 160), vy: rnd(-360, -260), ay: 1500, vr: rnd(14, 24), floor: Math.min(H - 4, o.r.bottom + 30), max: 1.3 });
+                }
             } else {
                 emit({ k: 'ring', x: o.x, y: o.y, r0: 16, r1: 34, col: getComputedStyle(document.body).getPropertyValue('--moss').trim() || '#56735C', max: .6 });
             }
             wake();
         },
 
-        /** A session finished: a show on its row (or wherever el is). */
-        done(el) {
+        /** A session finished: a show on its row (or wherever el is); name is the session's, for 靶场's feed. */
+        done(el, name) {
             const o = motion !== 'off' && center(el);
             if (!o) return;
             const accent = getComputedStyle(document.body).getPropertyValue('--moss').trim() || '#56735C';
@@ -604,6 +660,26 @@ export function createEffects({ main }) {
             } else if (skin === 'pixel') {
                 for (let i = 0; i < 34; i++) { const a = rnd(-2.9, -.25), v = rnd(110, 260); emit({ k: 'square', x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 520, vr: rnd(-8, 8), s: pick([3, 4, 5, 6]), col: pick(CONFETTI), max: rnd(1, 1.6) }); }
                 emit({ k: 'text', x: o.r.left + 30, y: o.y - 8, vy: -36, text: '+1', col: '#E8553B', max: 1.1 });
+            } else if (skin === 'range') {
+                // into the feed; a big hit marker on the crosshair and a target goes down, or a small one on the row without the scene
+                const v = ambientOn() ? rangeView() : null;
+                const hit = range.knock(name || el.querySelector?.('.name')?.textContent || '会话', Date.now(), v?.hud ? v : null);
+                const m = main.getBoundingClientRect();
+                if (hit) {
+                    const cx = m.left + hit.cross.x, cy = m.top + hit.cross.y;
+                    emit({ k: 'hit', x: cx, y: cy, col: '#4FE3B0', len: 16, gap: 8, w: 3, max: .5 });
+                    emit({ k: 'ring', x: cx, y: cy, r0: 14, r1: 60, col: '#4FE3B0', max: .5 });
+                    emit({ k: 'text', x: cx + 28, y: cy - 14, vy: -30, text: '+100', col: '#4FE3B0', max: .9 });
+                    if (hit.target) {
+                        const tx = m.left + hit.target.x, ty = m.top + hit.target.y;
+                        emit({ k: 'hit', x: tx, y: ty, col: '#FFFFFF', len: 6, gap: 3, w: 2, max: .32 });
+                        shards(tx, ty, 6, '#E9E3D6');
+                    }
+                } else {
+                    const x = o.r.left + 22;
+                    emit({ k: 'hit', x, y: o.y, col: '#4FE3B0', len: 9, gap: 5, w: 2.5, max: .45 });
+                    emit({ k: 'text', x: x + 16, y: o.y - 8, vy: -30, text: '+100', col: '#4FE3B0', max: .9 });
+                }
             } else {
                 emit({ k: 'ring', x: o.r.left + 22, y: o.y, r0: 4, r1: 46, col: accent, max: .9 });
                 for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; emit({ k: 'dot', x: o.r.left + 22, y: o.y, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, drag: 3, r: 2, col: accent, max: .7 }); }
@@ -628,9 +704,31 @@ export function createEffects({ main }) {
                 sparks(x, y, 9, STARLIGHT);
             } else if (skin === 'pixel') {
                 for (let i = 0; i < 12; i++) { const a = rnd(-3, -.2), v = rnd(70, 160); emit({ k: 'square', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, ay: 420, s: pick([3, 4, 5]), col: pick(CONFETTI), max: rnd(.6, 1) }); }
+            } else if (skin === 'range') {
+                emit({ k: 'hit', x, y, col: '#FFFFFF', len: 9, gap: 5, w: 2, max: .32 });
+                shards(x, y, 7, '#FF9A2E');
+                emit({ k: 'hole', x, y, max: 2.4, cracks: Array.from({ length: 5 }, () => ({ a: rnd(0, 6.3), l: rnd(4, 9) })) });
+                range.shot();
             } else {
                 emit({ k: 'ring', x, y, r0: 2, r1: 30, col: getComputedStyle(document.body).getPropertyValue('--moss').trim() || '#56735C', max: .7 });
             }
+            wake();
+        },
+
+        /** A message did not go out: 靶场 takes a hit (health drops, the window's edge flashes red). */
+        hurt() {
+            range.hurt();
+            if (skin !== 'range' || motion === 'off') return;
+            if (ambientOn()) {
+                const v = rangeView(), m = main.getBoundingClientRect(), cr = range.crossAt(v);
+                emit({ k: 'dmg', x: m.left + cr.x, y: m.top + cr.y, a: rnd(0, 6.3), max: 1 });
+            }
+            wake();
+        },
+
+        /** The live connection came or went: 靶场's health bar shows it. */
+        setOnline(on) {
+            range.setOnline(on);
             wake();
         },
 

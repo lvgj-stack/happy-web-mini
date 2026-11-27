@@ -1,7 +1,7 @@
 // node --test: skins — what is picked, the time of day, and each skin's colors.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SKINS, hexRgb, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from '../skins.js';
+import { SKINS, hexRgb, paletteFor, readSkin, setGun, setMotion, setSkin, timeOfDay } from '../skins.js';
 
 const memory = () => {
     const m = new Map();
@@ -10,11 +10,11 @@ const memory = () => {
 const at = (h, min = 0) => new Date(2026, 10, 26, h, min);
 
 test('nothing saved: the current look, with full motion', () => {
-    assert.deepEqual(readSkin(memory(), false), { id: 'moss', motion: 'full' });
+    assert.deepEqual(readSkin(memory(), false), { id: 'moss', motion: 'full', gun: true });
 });
 
 test('reduced motion and nothing picked yet: motion starts off', () => {
-    assert.deepEqual(readSkin(memory(), true), { id: 'moss', motion: 'off' });
+    assert.deepEqual(readSkin(memory(), true), { id: 'moss', motion: 'off', gun: true });
 });
 
 test('a motion picked by hand wins over reduced motion', () => {
@@ -26,26 +26,26 @@ test('a motion picked by hand wins over reduced motion', () => {
 test('broken or unknown values fall back to the defaults', () => {
     const s = memory();
     s.setItem('happy.skin', '{oops');
-    assert.deepEqual(readSkin(s, false), { id: 'moss', motion: 'full' });
+    assert.deepEqual(readSkin(s, false), { id: 'moss', motion: 'full', gun: true });
     s.setItem('happy.skin', JSON.stringify({ v: 1, id: 'nope', motion: 'wild' }));
-    assert.deepEqual(readSkin(s, false), { id: 'moss', motion: 'full' });
+    assert.deepEqual(readSkin(s, false), { id: 'moss', motion: 'full', gun: true });
     s.setItem('happy.skin', JSON.stringify({ v: 2, id: 'sakura', motion: 'off' }));
-    assert.deepEqual(readSkin(s, false), { id: 'moss', motion: 'full' }, 'another version is not read');
+    assert.deepEqual(readSkin(s, false), { id: 'moss', motion: 'full', gun: true }, 'another version is not read');
 });
 
 test('picking a skin keeps the motion, and the other way round', () => {
     const s = memory();
     setMotion(s, 'off');
     setSkin(s, 'wild');
-    assert.deepEqual(readSkin(s, false), { id: 'wild', motion: 'off' });
+    assert.deepEqual(readSkin(s, false), { id: 'wild', motion: 'off', gun: true });
     setMotion(s, 'events');
-    assert.deepEqual(readSkin(s, false), { id: 'wild', motion: 'events' });
+    assert.deepEqual(readSkin(s, false), { id: 'wild', motion: 'events', gun: true });
     setSkin(s, 'nope');
     assert.equal(readSkin(s, false).id, 'wild', 'an unknown skin is not saved');
 });
 
 test('the skins, in order', () => {
-    assert.deepEqual(SKINS.map((k) => k.id), ['moss', 'sakura', 'wild', 'sea', 'star', 'pixel']);
+    assert.deepEqual(SKINS.map((k) => k.id), ['moss', 'sakura', 'wild', 'sea', 'star', 'pixel', 'range']);
     for (const k of SKINS) { assert.ok(k.name); assert.ok(k.chip); }
 });
 
@@ -75,7 +75,7 @@ test('only 旷野 changes with the time, and only its night is dark', () => {
 test('every palette gives every color the page reads', () => {
     const KEYS = ['--paper', '--sheet', '--ink', '--muted', '--rule', '--moss', '--moss-tint', '--surface', '--ink-rgb', '--head', '--head-hover',
         '--amber', '--code-bg', '--accent-hover', '--idle', '--faint', '--glass', '--sel', '--ring', '--menu'];
-    for (const id of ['sakura', 'wild', 'sea', 'star', 'pixel']) {
+    for (const id of ['sakura', 'wild', 'sea', 'star', 'pixel', 'range']) {
         for (const time of ['day', 'dusk', 'night']) {
             const { vars } = paletteFor(id, time);
             for (const k of KEYS) assert.ok(vars[k], `${id} ${time} sets ${k}`);
@@ -110,13 +110,13 @@ test('深海 and 星夜 are dark at any hour, 像素 is light, none of them foll
 });
 
 test('every dark look darkens the text on its accent buttons', () => {
-    for (const [id, t] of [['sea', 'day'], ['star', 'day'], ['wild', 'night']]) {
+    for (const [id, t] of [['sea', 'day'], ['star', 'day'], ['wild', 'night'], ['range', 'day']]) {
         assert.match(paletteFor(id, t).vars['--on-accent'] ?? '', /^#[0-9A-F]{6}$/i, `${id} ${t}`);
     }
 });
 
 test('dark looks lighten the error red and the danger tint so warnings read on them', () => {
-    for (const [id, t] of [['sea', 'day'], ['star', 'day'], ['wild', 'night']]) {
+    for (const [id, t] of [['sea', 'day'], ['star', 'day'], ['wild', 'night'], ['range', 'day']]) {
         const { vars } = paletteFor(id, t);
         assert.equal(vars['--error'], '#F08A7A', `${id} ${t} --error`);
         assert.match(vars['--danger-tint'] ?? '', /^rgba\(240, 138, 122, \.\d+\)$/, `${id} ${t} --danger-tint`);
@@ -125,4 +125,22 @@ test('dark looks lighten the error red and the danger tint so warnings read on t
 
 test('像素 darkens its waiting-for-you color enough to read on its pale sidebar', () => {
     assert.equal(paletteFor('pixel', 'day').vars['--amber'], '#8F5A00');
+});
+
+test('靶场 is dark at any hour and does not follow the clock', () => {
+    for (const t of ['day', 'dusk', 'night']) assert.equal(paletteFor('range', t).dark, true, t);
+    assert.deepEqual(paletteFor('range', 'day'), paletteFor('range', 'night'));
+});
+
+test('the 靶场 weapon is on until switched off, and stays off across skins and motions', () => {
+    const s = memory();
+    assert.equal(readSkin(s, false).gun, true);
+    setGun(s, false);
+    setSkin(s, 'range');
+    setMotion(s, 'events');
+    assert.deepEqual(readSkin(s, false), { id: 'range', motion: 'events', gun: false });
+    setGun(s, true);
+    assert.equal(readSkin(s, false).gun, true);
+    s.setItem('happy.skin', JSON.stringify({ v: 1, id: 'range', gun: 'no' }));
+    assert.equal(readSkin(s, false).gun, true, 'anything but false reads as on');
 });

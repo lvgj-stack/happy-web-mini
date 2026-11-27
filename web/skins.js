@@ -2,7 +2,7 @@
 // per browser. 苔绿 is the stylesheet's own look and sets no colors; the others
 // override the CSS variables on <body> (app.js), so they also beat the Mac
 // app's variables under body.desktop-mac. 旷野 follows the clock: day, dusk
-// and a dark night; 深海 and 星夜 are dark all the time.
+// and a dark night; 深海, 星夜 and 靶场 are dark all the time.
 
 const KEY = 'happy.skin';
 const MOTIONS = ['full', 'events', 'off'];
@@ -70,6 +70,14 @@ const PIXEL = palette({
     glass: 'rgba(207, 227, 239, .55)', sel: 'rgba(232, 85, 59, .18)', ring: 'rgba(232, 85, 59, .4)', menu: 'rgba(228, 241, 248, .82)',
 });
 
+const RANGE = palette({
+    paper: '#161C20', sheet: '#0F1316', ink: '#DCE4E8', muted: '#7F8C95', rule: '#26313A', accent: '#FF9A2E', tint: '#1F2A30',
+    amber: '#FF5757', surface: '#182025', inkRgb: '220, 228, 232', head: '#1D252A', headHover: '#232D33', code: '#12181C',
+    accentHover: '#FFAD52', idle: '#46525A', faint: '#5E6A72',
+    glass: 'rgba(22, 28, 32, .62)', sel: 'rgba(255, 154, 46, .2)', ring: 'rgba(255, 154, 46, .45)', menu: 'rgba(22, 28, 32, .84)',
+    extra: { '--add': '#4FE3B0', '--del': '#F08A7A', '--on-accent': '#1A1206', '--error': '#F08A7A', '--danger-tint': 'rgba(240, 138, 122, .18)' },
+});
+
 /** The skins in the order settings shows them; `chip` is the swatch's CSS background. */
 export const SKINS = [
     { id: 'moss', name: '苔绿', chip: 'linear-gradient(135deg, #FCFCFA 50%, #56735C 50%)' },
@@ -78,6 +86,7 @@ export const SKINS = [
     { id: 'sea', name: '深海', chip: 'linear-gradient(135deg, #0A1A28 50%, #3FD0C9 50%)' },
     { id: 'star', name: '星夜', chip: 'linear-gradient(135deg, #121029 50%, #F5C451 50%)' },
     { id: 'pixel', name: '像素', chip: 'linear-gradient(135deg, #E4F1F8 50%, #E8553B 50%)' },
+    { id: 'range', name: '靶场', chip: 'linear-gradient(135deg, #0F1316 50%, #FF9A2E 50%)' },
 ];
 const known = (id) => SKINS.some((k) => k.id === id);
 
@@ -90,18 +99,24 @@ function saved(storage) {
     }
 }
 
-/** What is picked: { id, motion }. Motion starts off when the system asks for less motion and none was picked. */
+/**
+ * What is picked: { id, motion, gun }. Motion starts off when the system asks
+ * for less motion and none was picked; gun (靶场's weapon) is on unless switched off.
+ */
 export function readSkin(storage, reducedMotion) {
     const v = saved(storage);
     return {
         id: known(v.id) ? v.id : 'moss',
         motion: MOTIONS.includes(v.motion) ? v.motion : (reducedMotion ? 'off' : 'full'),
+        gun: v.gun !== false,
     };
 }
 
 function save(storage, next) {
     const v = saved(storage);
-    storage.setItem(KEY, JSON.stringify({ v: 1, id: known(v.id) ? v.id : 'moss', ...(MOTIONS.includes(v.motion) ? { motion: v.motion } : {}), ...next }));
+    storage.setItem(KEY, JSON.stringify({
+        v: 1, id: known(v.id) ? v.id : 'moss', ...(MOTIONS.includes(v.motion) ? { motion: v.motion } : {}), ...(v.gun === false ? { gun: false } : {}), ...next,
+    }));
 }
 
 export function setSkin(storage, id) {
@@ -110,6 +125,11 @@ export function setSkin(storage, id) {
 
 export function setMotion(storage, motion) {
     if (MOTIONS.includes(motion)) save(storage, { motion });
+}
+
+/** 靶场's weapon on or off. */
+export function setGun(storage, on) {
+    save(storage, { gun: !!on });
 }
 
 /** 'day' from 6:00, 'dusk' from 17:00, 'night' from 19:00 (local time). */
@@ -126,6 +146,7 @@ export function paletteFor(id, time) {
     if (id === 'sea') return { vars: SEA, dark: true };
     if (id === 'star') return { vars: STAR, dark: true };
     if (id === 'pixel') return { vars: PIXEL, dark: false };
+    if (id === 'range') return { vars: RANGE, dark: true };
     if (id === 'wild') {
         const t = WILD[time] ? time : 'day';
         return { vars: WILD[t], dark: t === 'night' };

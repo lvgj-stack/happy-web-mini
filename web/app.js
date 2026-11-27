@@ -40,7 +40,7 @@ import { formatTokens, heatmapWeeks, summarize } from './heatmap.js';
 import { fitToViewport } from './viewport.js';
 import { moveHost, readHostOrder, sortHosts, writeHostOrder } from './hostOrder.js';
 import { SCALES, readChatScale, setChatScale } from './fontscale.js';
-import { SKINS, hexRgb, paletteFor, readSkin, setMotion, setSkin, timeOfDay } from './skins.js';
+import { SKINS, hexRgb, paletteFor, readSkin, setGun, setMotion, setSkin, timeOfDay } from './skins.js';
 import { createEffects } from './effects.js';
 import { SLOTS, prepareSticker, readStickers, removeSticker, setSticker } from './stickers.js';
 import { PRESETS, prepareWallpaper, readWallpaper, removeWallpaperImage, setWallpaperColor, setWallpaperFade, setWallpaperImage, wallpaperStyle } from './wallpaper.js';
@@ -3065,6 +3065,7 @@ async function send(choice) {
         if (!socket?.connected) await pollMessages();
     } catch (e) {
         notice(`没有发出去：${e.message}`);
+        effects.hurt();
     } finally {
         state.sending = false;
         button.disabled = false;
@@ -3506,7 +3507,7 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
  * the stylesheet, .dark for a dark look, and the scene for effects.js.
  */
 function applySkin() {
-    const { id, motion } = readSkin(localStorage, reducedMotion());
+    const { id, motion, gun } = readSkin(localStorage, reducedMotion());
     const time = timeOfDay(new Date());
     const { vars, dark } = paletteFor(id, time);
     const style = document.body.style;
@@ -3521,7 +3522,7 @@ function applySkin() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--paper').trim() || '#F2F3EF');
     applyWallpaper();
     desktop.setAppearance(dark);
-    effects.setSkin(id, motion, time);
+    effects.setSkin(id, motion, time, { gun });
 }
 
 /**
@@ -3539,13 +3540,13 @@ function celebrateDone(s) {
     const list = $('list');
     const row = list.querySelector(`.row[data-id="${CSS.escape(s.id)}"]`);
     const r = row?.getBoundingClientRect(), box = list.getBoundingClientRect();
-    if (r && r.height && r.bottom > box.top && r.top < box.bottom) effects.done(row);
-    else if (s === state.current) effects.done($('send'));
+    if (r && r.height && r.bottom > box.top && r.top < box.bottom) effects.done(row, sessionTitle(s));
+    else if (s === state.current) effects.done($('send'), sessionTitle(s));
 }
 
-/** 皮肤 and 动效 in settings. */
+/** 皮肤 and 动效 in settings (靶场's weapon switch only while 靶场 is picked). */
 function renderSkinSetting() {
-    const { id, motion } = readSkin(localStorage, reducedMotion());
+    const { id, motion, gun } = readSkin(localStorage, reducedMotion());
     $('skin-swatches').replaceChildren(...SKINS.map((k) => {
         const b = el('button', 'swatch');
         b.type = 'button';
@@ -3559,6 +3560,8 @@ function renderSkinSetting() {
         return b;
     }));
     for (const radio of document.querySelectorAll('input[name="skin-motion"]')) radio.checked = radio.value === motion;
+    $('skin-gun-row').hidden = id !== 'range';
+    $('skin-gun').checked = gun;
 }
 
 const STICKER_NAMES = { fall: '飘落物', done: '干完了', ask: '等你回答' };
@@ -3812,12 +3815,14 @@ function connectSocket() {
         transports: ['websocket'],
     });
     socket.on('connect', () => {
+        effects.setOnline(true); // 靶场's health bar
         // Fill whatever happened while we were away.
         pollMessages();
         syncSessions().catch((e) => console.error(e));
     });
     socket.on('update', (u) => onUpdate(u?.body).catch((e) => console.error(e)));
     socket.on('ephemeral', onEphemeral);
+    socket.on('disconnect', () => effects.setOnline(false));
 }
 
 async function onUpdate(body) {
@@ -5028,6 +5033,7 @@ window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',
 for (const radio of document.querySelectorAll('input[name="skin-motion"]')) {
     radio.addEventListener('change', () => { setMotion(localStorage, radio.value); applySkin(); settingsSaved(); });
 }
+$('skin-gun').addEventListener('change', () => { setGun(localStorage, $('skin-gun').checked); applySkin(); settingsSaved(); });
 applyChatScale();
 document.addEventListener('visibilitychange', () => markRead(state.current));
 window.addEventListener('focus', () => markRead(state.current));

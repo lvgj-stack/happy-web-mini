@@ -32,7 +32,7 @@
 - `localStorage` 的键都以 `happy.` 开头。现有的键有：`happy.server`、`happy.token`、`happy.secret`、`happy.seen`、
   `happy.collapsed`、`happy.hostOrder`（电脑的顺序，`{ v: 1, keys: [machineKey…] }`）、`happy.archivedOpen`、`happy.bgDismissed`、`happy.brand`、`happy.sideWidth`、`happy.sideCollapsed`、
   `happy.linksHidden`、`happy.linkNames`（右栏链接自定义名称，`{ v: 1, names: { url: label } }`，退出登录时清除）、`happy.links.<会话 id>`、`happy.lines.<会话 id>`、`happy.usage.<会话 id>`（用量页的 token 统计），以及各模块自己的设置：`happy.defaults`（默认模型 / 强度 / 权限）、
-  `happy.skin`（皮肤和动效，`{ v: 1, id, motion }`，见 `skins.js`）、`happy.skin.sticker.fall` / `.done` / `.ask`（自定义贴图，128px 的 PNG data URL，见 `stickers.js`）、`happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
+  `happy.skin`（皮肤和动效，`{ v: 1, id, motion, gun }`，`gun: false` 是靶场关掉手持武器，见 `skins.js`）、`happy.skin.sticker.fall` / `.done` / `.ask`（自定义贴图，128px 的 PNG data URL，见 `stickers.js`）、`happy.wallpaper` / `happy.wallpaper.image`（背景）、`happy.chatScale`（字号）、`happy.notify` / `happy.notifySound`（通知）、
   `happy.newWorktree`（新建会话默认新建 worktree，值 `new`；没有就是直接在目录里，见 `worktree.js`）。
 - 已读：正在看的会话，标签页可见、不在设置页或用量页（`coveredByPage()`）、并且窗口有焦点（`document.hasFocus()`）才算看过（`viewing()`），网页和 Mac 应用一样；
   窗口重新拿到焦点（`focus`）时补标已读。
@@ -58,6 +58,10 @@
 - 自定义贴图：`stickers.js` 只认 `data:image/png;base64,`、每张不超过 20 万字符，坏的当没有；`applyStickers()` 加载成 `Image` 交给 `effects.setStickers()`。
   有 `ask` 贴图时 `body` 加 `.ask-sticker`，样式表藏起等待行的状态图标，贴图画在那个位置。
   `fall` 让各场景跳过自己的小飘落物（场景本身照画），苔绿设了 `fall` 也算有氛围；`ask` 让所有皮肤都画等待行（`waitingRows()` 只算看得见的行）。
+- 靶场在 `range.js`（`effects.js` 只做分发）：氛围画布上画场景、准星、武器和 HUD，事件画布上画战报、连续完成和受击泛红（`overlay()`，返回还有没有要画的，
+  动画循环据此决定停不停）；它自己的粒子种类在 `drawRangeParticle`。HUD 的可用区域是 `hudArea()`（聊天头部之下、输入框之上、停靠的链接面板左边），
+  雷达点来自 `#list .row` 的 `.busy` / `.asking`，每秒取一次。app.js 要告诉它的事：`effects.hurt()`（消息没发出去）、`effects.setOnline()`（socket 连上 / 断开）、
+  `effects.done(el, name)` 带会话名（战报用）、`effects.setSkin(..., { gun })`。武器的枪口位置是上一帧画出来时记下的，所以只有氛围层在画时才从枪口开火。
 - 场景出错（`seed` 或绘制抛异常）只打一次日志、清空这个场景，不能让动画循环停掉，否则事件动效也跟着没了。
 - 「干完了」= `isThinking` 由真变假（`trackActivity`、`onEphemeral` 两处），见 `celebrateDone`。侧栏状态图标按皮肤换是纯 CSS：
   藏掉对应的 svg，用 `.status` 的伪元素画。字形只用各平台字体都有的（试过如尼字母，Linux 上没有字体会显示成方框）。

@@ -906,6 +906,16 @@
   body[data-skin="pixel"] .round { border-radius: 0; box-shadow: 2px 2px 0 var(--ink); }
   body[data-skin="pixel"] .msg.user[data-time]::after { margin-top: 7px; }
   body[data-skin="pixel"] .msg.user[data-time] { margin-bottom: 34px; }
+  /* 靶场: a crosshair turns while working; a red [!] blinks while waiting (effects.js also locks on to the row) */
+  body[data-skin="range"] .row .status { position: relative; }
+  body[data-skin="range"] .row.busy:not(.asking) .status .st-working, body[data-skin="range"] .row.asking .status .st-waiting { display: none; }
+  body[data-skin="range"] .row.busy:not(.asking) .status::before { content: ""; position: absolute; inset: 2px; border: 1.5px solid var(--moss); border-radius: 50%; }
+  body[data-skin="range"] .row.busy:not(.asking) .status::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(var(--moss), var(--moss)) center / 1.5px 100% no-repeat, linear-gradient(var(--moss), var(--moss)) center / 100% 1.5px no-repeat;
+    -webkit-mask: radial-gradient(circle, transparent 2.5px, #000 3px); mask: radial-gradient(circle, transparent 2.5px, #000 3px); animation: spin 2.4s linear infinite; }
+  body[data-skin="range"] .row.asking .status::after { content: "[!]"; position: absolute; left: -3px; top: 0; width: 20px; font: bold 10px/14px ui-monospace, Menlo, Consolas, monospace;
+    text-align: center; color: var(--amber); animation: blink 1s steps(2, start) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
   /* A waiting-for-you sticker (effects.js draws it on the state icon's spot) stands in for the skin's mark */
   body.ask-sticker .row.asking .status > svg { visibility: hidden; }
   body.ask-sticker .row.asking .status::before, body.ask-sticker .row.asking .status::after { display: none; }
@@ -1049,6 +1059,7 @@
         <label class="check"><input type="radio" name="skin-motion" value="events"> 只在事件时</label>
         <label class="check"><input type="radio" name="skin-motion" value="off"> 关闭</label>
       </div>
+      <label class="check" id="skin-gun-row" hidden><input type="checkbox" id="skin-gun"> 靶场：显示手持武器（右下角，发消息时开火）</label>
       <h3>背景</h3>
       <p class="hint">聊天区的背景，可以选颜色或者用自己的图片。图片会在浏览器里压缩后保存，只保存在这个浏览器里。</p>
       <div id="wallpaper-swatches" role="radiogroup" aria-label="背景"></div>
